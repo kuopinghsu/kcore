@@ -1,0 +1,9 @@
+[submodule "verif/riscv-formal"]
+	path = verif/riscv-formal
+	url = https://github.com/SymbioticEDA/riscv-formal.git
+[submodule "verif/riscv-arch-test"]
+	path = verif/riscv-arch-test
+	url = https://github.com/riscv-non-isa/riscv-arch-test.git
+[submodule "syn/pdk/asap7"]
+	path = syn/pdk/asap7
+	url = https://github.com/The-OpenROAD-Project/asap7.git

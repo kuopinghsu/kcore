@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1000" viewBox="0 0 1400 1000">
+  <defs>
+    <style>
+      .box { fill: #e8f4f8; stroke: #2c5aa0; stroke-width: 2.5; }
+      .box-cpu { fill: #fff9e6; stroke: #cc7000; stroke-width: 3; }
+      .box-pipeline { fill: #f5f5f5; stroke: #555555; stroke-width: 2; }
+      .box-peripheral { fill: #e6ffe6; stroke: #009900; stroke-width: 2.5; }
+      .box-memory { fill: #ffe6f0; stroke: #990033; stroke-width: 2.5; }
+      .text-title { font-family: 'Segoe UI', Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #000000; }
+      .text-subtitle { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; font-weight: bold; fill: #333333; }
+      .text-normal { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; fill: #000000; }
+      .text-small { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; fill: #444444; }
+      .arrow { stroke: #333333; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead); }
+      .bus { stroke: #0066cc; stroke-width: 4; fill: none; }
+      .bus-label { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; fill: #0066cc; font-weight: bold; }
+      .irq-line { stroke: #ff6600; stroke-width: 2.5; stroke-dasharray: 6,4; fill: none; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333333" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="700" y="35" class="text-title" text-anchor="middle" font-size="24">RISC-V RV32IMA SoC Architecture</text>
+
+  <!-- SoC Container -->
+  <rect x="30" y="70" width="1340" height="630" class="box" rx="8"/>
+  <text x="700" y="100" class="text-title" text-anchor="middle">SoC Top Level (soc_top.sv)</text>
+
+  <!-- CPU Core Container -->
+  <rect x="60" y="130" width="800" height="450" class="box-cpu" rx="8"/>
+  <text x="460" y="160" class="text-title" text-anchor="middle">CPU Core (kcore.sv)</text>
+
+  <!-- 5-Stage Pipeline -->
+  <rect x="90" y="190" width="130" height="85" class="box-pipeline" rx="5"/>
+  <text x="155" y="212" class="text-subtitle" text-anchor="middle">IF</text>
+  <text x="155" y="230" class="text-small" text-anchor="middle">Instruction Fetch</text>
+  <text x="155" y="250" class="text-small" text-anchor="middle">PC + memory</text>
+
+  <rect x="240" y="190" width="130" height="85" class="box-pipeline" rx="5"/>
+  <text x="305" y="212" class="text-subtitle" text-anchor="middle">ID</text>
+  <text x="305" y="230" class="text-small" text-anchor="middle">Decode</text>
+  <text x="305" y="250" class="text-small" text-anchor="middle">Reg read + imm</text>
+
+  <rect x="390" y="190" width="130" height="85" class="box-pipeline" rx="5"/>
+  <text x="455" y="212" class="text-subtitle" text-anchor="middle">EX</text>
+  <text x="455" y="230" class="text-small" text-anchor="middle">Execute</text>
+  <text x="455" y="250" class="text-small" text-anchor="middle">ALU + branch</text>
+
+  <rect x="540" y="190" width="130" height="85" class="box-pipeline" rx="5"/>
+  <text x="605" y="212" class="text-subtitle" text-anchor="middle">MEM</text>
+  <text x="605" y="230" class="text-small" text-anchor="middle">Memory</text>
+  <text x="605" y="250" class="text-small" text-anchor="middle">Load/Store</text>
+
+  <rect x="690" y="190" width="130" height="85" class="box-pipeline" rx="5"/>
+  <text x="755" y="212" class="text-subtitle" text-anchor="middle">WB</text>
+  <text x="755" y="230" class="text-small" text-anchor="middle">Write Back</text>
+  <text x="755" y="250" class="text-small" text-anchor="middle">RF write</text>
+
+  <!-- Pipeline arrows -->
+  <line x1="220" y1="232" x2="240" y2="232" class="arrow"/>
+  <line x1="370" y1="232" x2="390" y2="232" class="arrow"/>
+  <line x1="520" y1="232" x2="540" y2="232" class="arrow"/>
+  <line x1="670" y1="232" x2="690" y2="232" class="arrow"/>
+
+  <!-- Register File -->
+  <rect x="90" y="305" width="350" height="80" class="box-pipeline" rx="5"/>
+  <text x="265" y="330" class="text-subtitle" text-anchor="middle">Register File</text>
+  <text x="265" y="350" class="text-small" text-anchor="middle">32 x 32-bit GPRs (x0-x31)</text>
+  <text x="265" y="367" class="text-small" text-anchor="middle">2 read ports, 1 write port</text>
+
+  <!-- CSR Unit -->
+  <rect x="470" y="305" width="350" height="80" class="box-pipeline" rx="5"/>
+  <text x="645" y="330" class="text-subtitle" text-anchor="middle">CSR Unit</text>
+  <text x="645" y="350" class="text-small" text-anchor="middle">mstatus, mie, mip, mtvec, mepc, mcause</text>
+  <text x="645" y="367" class="text-small" text-anchor="middle">Performance: mcycle, minstret</text>
+
+  <!-- Hazard and Forwarding -->
+  <rect x="90" y="410" width="730" height="60" style="fill:#fff0f0; stroke:#cc0000; stroke-width:2;" rx="5"/>
+  <text x="455" y="432" class="text-subtitle" text-anchor="middle" fill="#cc0000">Pipeline Control</text>
+  <text x="455" y="452" class="text-small" text-anchor="middle">Forwarding: EX-&gt;EX, MEM-&gt;EX, WB-&gt;EX  |  Hazard: Load-use stalls, Branch flush</text>
+
+  <!-- CPU to Interconnect connections -->
+  <!-- Instruction Bus from IF stage -->
+  <line x1="155" y1="275" x2="155" y2="500" class="bus"/>
+  <line x1="155" y1="500" x2="155" y2="530" class="bus"/>
+  <text x="165" y="515" class="bus-label">Instruction Bus</text>
+  
+  <!-- Data Bus from MEM stage -->
+  <line x1="605" y1="275" x2="605" y2="500" class="bus"/>
+  <line x1="605" y1="500" x2="605" y2="530" class="bus"/>
+  <text x="615" y="515" class="bus-label">Data Bus</text>
+
+  <!-- AXI Interconnect -->
+  <rect x="90" y="530" width="770" height="100" class="box" rx="8"/>
+  <text x="475" y="560" class="text-title" text-anchor="middle">AXI4-Lite Interconnect</text>
+  <text x="475" y="585" class="text-normal" text-anchor="middle">Address Decoder and Bus Arbiter</text>
+  <text x="475" y="605" class="text-small" text-anchor="middle">Harvard Architecture: Separate Instruction and Data Buses</text>
+  <text x="475" y="620" class="text-small" text-anchor="middle">Channels: AR (Read Addr), R (Read Data), AW (Write Addr), W (Write Data), B (Write Response)</text>
+
+  <!-- Peripherals Column -->
+  <!-- UART (Top) -->
+  <rect x="920" y="130" width="200" height="120" class="box-peripheral" rx="8"/>
+  <text x="1020" y="160" class="text-title" text-anchor="middle">UART</text>
+  <text x="1020" y="180" class="text-normal" text-anchor="middle">Serial Port</text>
+  <text x="1020" y="200" class="text-small" text-anchor="middle">(uart.sv)</text>
+  <text x="1020" y="220" class="text-normal" text-anchor="middle" font-weight="bold">0x1000_0000</text>
+  <text x="1020" y="240" class="text-small" text-anchor="middle">TX-only, 115200 baud</text>
+
+  <!-- CLINT (Middle) -->
+  <rect x="920" y="270" width="200" height="130" class="box-peripheral" rx="8"/>
+  <text x="1020" y="300" class="text-title" text-anchor="middle">CLINT</text>
+  <text x="1020" y="320" class="text-normal" text-anchor="middle">Core-Local Interruptor</text>
+  <text x="1020" y="340" class="text-small" text-anchor="middle">(clint.sv)</text>
+  <text x="1020" y="360" class="text-normal" text-anchor="middle" font-weight="bold">0x0200_0000</text>
+  <text x="1020" y="380" class="text-small" text-anchor="middle">mtime (64-bit timer)</text>
+  <text x="1020" y="395" class="text-small" text-anchor="middle">mtimecmp (compare)</text>
+
+  <!-- Exit Control (Bottom) -->
+  <rect x="920" y="420" width="200" height="110" class="box-peripheral" rx="8"/>
+  <text x="1020" y="450" class="text-title" text-anchor="middle">Exit Control</text>
+  <text x="1020" y="470" class="text-normal" text-anchor="middle">Simulation Exit</text>
+  <text x="1020" y="490" class="text-normal" text-anchor="middle" font-weight="bold">0xFFFF_FFF0</text>
+  <text x="1020" y="510" class="text-small" text-anchor="middle">Magic exit address</text>
+  <text x="1020" y="525" class="text-small" text-anchor="middle">tohost/exit code</text>
+
+  <!-- Interrupt Controller -->
+  <rect x="1150" y="270" width="210" height="130" class="box" rx="8"/>
+  <text x="1255" y="300" class="text-title" text-anchor="middle">Interrupt</text>
+  <text x="1255" y="320" class="text-title" text-anchor="middle">Controller</text>
+  <text x="1255" y="345" class="text-small" text-anchor="middle">Timer interrupt</text>
+  <text x="1255" y="360" class="text-small" text-anchor="middle">CLINT -&gt; CPU mip</text>
+  <text x="1255" y="380" class="text-small" text-anchor="middle">Machine-mode</text>
+  <text x="1255" y="395" class="text-small" text-anchor="middle">mie/mstatus control</text>
+
+  <!-- AXI Bus connections from Interconnect to peripherals -->
+  <line x1="860" y1="580" x2="900" y2="580" class="bus"/>
+  <line x1="900" y1="580" x2="900" y2="190" class="bus"/>
+  
+  <!-- To UART -->
+  <line x1="900" y1="190" x2="920" y2="190" class="bus"/>
+  
+  <!-- To CLINT -->
+  <line x1="900" y1="335" x2="920" y2="335" class="bus"/>
+  
+  <!-- To Exit Control -->
+  <line x1="900" y1="475" x2="920" y2="475" class="bus"/>
+
+  <!-- Interrupt line from CLINT to Interrupt Controller -->
+  <line x1="1120" y1="335" x2="1150" y2="335" class="irq-line"/>
+  <text x="1125" y="330" class="text-small" fill="#ff6600" font-weight="bold">Timer</text>
+  
+  <!-- Interrupt from CPU CSR to Interrupt Controller top (control path) -->
+  <!-- Route from CSR right side, up to top, across, then down into controller top -->
+  <line x1="820" y1="340" x2="880" y2="340" class="irq-line"/>
+  <line x1="880" y1="340" x2="880" y2="90" class="irq-line"/>
+  <line x1="880" y1="90" x2="1255" y2="90" class="irq-line"/>
+  <line x1="1255" y1="90" x2="1255" y2="270" class="irq-line"/>
+  <text x="1050" y="85" class="text-small" fill="#ff6600" font-weight="bold">CPU CSR (mie/mstatus) -&gt; IRQ Control</text>
+
+  <!-- External Memory -->
+  <rect x="150" y="750" width="650" height="140" class="box-memory" rx="8"/>
+  <text x="475" y="780" class="text-title" text-anchor="middle">External Memory (AXI4-Lite Memory Model)</text>
+  <text x="475" y="800" class="text-small" text-anchor="middle">(axi_memory.sv - Testbench Component)</text>
+  <text x="475" y="830" class="text-subtitle" text-anchor="middle">2 MB RAM</text>
+  <text x="475" y="853" class="text-normal" text-anchor="middle" font-weight="bold">Address: 0x8000_0000 - 0x801F_FFFF</text>
+  <text x="475" y="875" class="text-small" text-anchor="middle">Configurable latency: 1-4 cycles  |  Contains: Program code, data, stack</text>
+
+  <!-- Connection to external memory -->
+  <line x1="475" y1="630" x2="475" y2="750" class="bus"/>
+  <text x="485" y="690" class="bus-label">AXI4-Lite Memory Bus</text>
+
+  <!-- Address decode info -->
+  <rect x="920" y="550" width="320" height="130" class="box" rx="8"/>
+  <text x="1080" y="580" class="text-subtitle" text-anchor="middle">Address Map</text>
+  <text x="1080" y="605" class="text-normal" text-anchor="middle">0x0200_xxxx -&gt; CLINT</text>
+  <text x="1080" y="628" class="text-normal" text-anchor="middle">0x1000_xxxx -&gt; UART</text>
+  <text x="1080" y="651" class="text-normal" text-anchor="middle">0x8000_xxxx -&gt; RAM</text>
+  <text x="1080" y="674" class="text-normal" text-anchor="middle">0xFFFF_FFF0 -&gt; Exit</text>
+
+  <!-- Legend moved to bottom-right side -->
+  <rect x="920" y="750" width="450" height="140" style="fill:#f9f9f9; stroke:#999999; stroke-width:1;" rx="5"/>
+  <text x="1145" y="775" class="text-subtitle" text-anchor="middle">Legend</text>
+  
+  <rect x="940" y="795" width="25" height="25" class="box-cpu"/>
+  <text x="975" y="812" class="text-normal">CPU Core</text>
+  
+  <rect x="1070" y="795" width="25" height="25" class="box-peripheral"/>
+  <text x="1105" y="812" class="text-normal">Peripherals</text>
+  
+  <rect x="1210" y="795" width="25" height="25" class="box-memory"/>
+  <text x="1245" y="812" class="text-normal">Memory</text>
+  
+  <rect x="940" y="835" width="25" height="25" class="box"/>
+  <text x="975" y="852" class="text-normal">Control/Info</text>
+  
+  <line x1="1070" y1="847" x2="1120" y2="847" class="bus"/>
+  <text x="1130" y="852" class="text-normal">AXI Bus</text>
+
+  <line x1="1210" y1="847" x2="1260" y2="847" class="irq-line"/>
+  <text x="1270" y="852" class="text-normal">Interrupt</text>
+
+</svg>

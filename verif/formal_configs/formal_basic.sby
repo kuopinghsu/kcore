@@ -1,0 +1,33 @@
+# SymbiYosys Configuration for RISC-V Core Formal Verification
+# This is a basic example configuration file
+# Copy and modify for specific verification tasks
+
+[tasks]
+bmc    # Bounded model checking
+# prove  # Unbounded proof (uncomment if solver supports)
+cover  # Coverage analysis
+
+[options]
+mode bmc
+depth 10
+expect pass
+
+[engines]
+smtbmc yices
+# smtbmc z3
+# smtbmc boolector
+# abc pdr
+
+[script]
+# Read SystemVerilog files
+read -formal rvfi_wrapper.sv
+read -formal kcore.sv
+read -formal csr.sv
+
+# Prepare design
+prep -top rvfi_wrapper
+
+[files]
+rvfi_wrapper.sv
+../../rtl/kcore.sv
+../../rtl/csr.sv

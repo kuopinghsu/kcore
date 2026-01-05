@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1200" viewBox="0 0 1400 1200">
+  <defs>
+    <style>
+      .stage { fill: #e8f4f8; stroke: #2c5aa0; stroke-width: 2; }
+      .register { fill: #fff5e6; stroke: #cc7000; stroke-width: 2; }
+      .hazard { fill: #ffe6e6; stroke: #cc0000; stroke-width: 2; }
+      .mux { fill: #e6ffe6; stroke: #009900; stroke-width: 2; }
+      .text-title { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #000000; }
+      .text-normal { font-family: Arial, sans-serif; font-size: 12px; fill: #000000; }
+      .text-small { font-family: Arial, sans-serif; font-size: 10px; fill: #333333; }
+      .arrow { stroke: #333333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .forward-path { stroke: #cc0000; stroke-width: 3; fill: none; marker-end: url(#forwardhead); stroke-dasharray: 5,3; }
+      .data-path { stroke: #0066cc; stroke-width: 2.5; fill: none; marker-end: url(#datahead); }
+      .label-forward { font-family: Arial, sans-serif; font-size: 11px; fill: #cc0000; font-weight: bold; }
+      .label-data { font-family: Arial, sans-serif; font-size: 10px; fill: #0066cc; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333333" />
+    </marker>
+    <marker id="forwardhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#cc0000" />
+    </marker>
+    <marker id="datahead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#0066cc" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="700" y="30" class="text-title" text-anchor="middle" font-size="20">Pipeline Data Forwarding and Hazard Detection</text>
+
+  <!-- Pipeline Stages -->
+  <rect x="50" y="100" width="120" height="200" class="stage" rx="5"/>
+  <text x="110" y="125" class="text-title" text-anchor="middle">IF</text>
+  <text x="110" y="145" class="text-small" text-anchor="middle">Instruction</text>
+  <text x="110" y="160" class="text-small" text-anchor="middle">Fetch</text>
+  <text x="110" y="190" class="text-small" text-anchor="middle">• Fetch from mem</text>
+  <text x="110" y="205" class="text-small" text-anchor="middle">• PC update</text>
+  <text x="110" y="220" class="text-small" text-anchor="middle">• Branch predict</text>
+
+  <rect x="220" y="100" width="140" height="200" class="stage" rx="5"/>
+  <text x="290" y="125" class="text-title" text-anchor="middle">ID</text>
+  <text x="290" y="145" class="text-small" text-anchor="middle">Instruction Decode</text>
+  <text x="290" y="175" class="text-small" text-anchor="middle">• Decode opcode</text>
+  <text x="290" y="190" class="text-small" text-anchor="middle">• Read RF[rs1]</text>
+  <text x="290" y="205" class="text-small" text-anchor="middle">• Read RF[rs2]</text>
+  <text x="290" y="220" class="text-small" text-anchor="middle">• Gen immediate</text>
+  <text x="290" y="235" class="text-small" text-anchor="middle">• Detect hazards</text>
+
+  <rect x="410" y="100" width="160" height="200" class="stage" rx="5"/>
+  <text x="490" y="125" class="text-title" text-anchor="middle">EX</text>
+  <text x="490" y="145" class="text-small" text-anchor="middle">Execute</text>
+  <text x="490" y="175" class="text-small" text-anchor="middle">• ALU operation</text>
+  <text x="490" y="190" class="text-small" text-anchor="middle">• Branch eval</text>
+  <text x="490" y="205" class="text-small" text-anchor="middle">• Addr calc</text>
+  <text x="490" y="220" class="text-small" text-anchor="middle">• MUL/DIV</text>
+  <text x="490" y="240" class="text-small" text-anchor="middle" fill="#cc0000">Result → rd_ex</text>
+
+  <rect x="620" y="100" width="140" height="200" class="stage" rx="5"/>
+  <text x="690" y="125" class="text-title" text-anchor="middle">MEM</text>
+  <text x="690" y="145" class="text-small" text-anchor="middle">Memory Access</text>
+  <text x="690" y="175" class="text-small" text-anchor="middle">• Load/Store</text>
+  <text x="690" y="190" class="text-small" text-anchor="middle">• CSR ops</text>
+  <text x="690" y="205" class="text-small" text-anchor="middle">• Exception</text>
+  <text x="690" y="225" class="text-small" text-anchor="middle" fill="#cc0000">Data → rd_mem</text>
+
+  <rect x="810" y="100" width="130" height="200" class="stage" rx="5"/>
+  <text x="875" y="125" class="text-title" text-anchor="middle">WB</text>
+  <text x="875" y="145" class="text-small" text-anchor="middle">Write Back</text>
+  <text x="875" y="175" class="text-small" text-anchor="middle">• Write RF[rd]</text>
+  <text x="875" y="190" class="text-small" text-anchor="middle">• Update CSRs</text>
+  <text x="875" y="205" class="text-small" text-anchor="middle">• Retire instr</text>
+  <text x="875" y="225" class="text-small" text-anchor="middle" fill="#cc0000">Result → rd_wb</text>
+
+  <!-- Pipeline registers -->
+  <rect x="180" y="150" width="30" height="80" class="register" rx="2"/>
+  <text x="195" y="195" class="text-small" text-anchor="middle" transform="rotate(-90 195 195)">IF/ID</text>
+
+  <rect x="370" y="150" width="30" height="80" class="register" rx="2"/>
+  <text x="385" y="195" class="text-small" text-anchor="middle" transform="rotate(-90 385 195)">ID/EX</text>
+
+  <rect x="580" y="150" width="30" height="80" class="register" rx="2"/>
+  <text x="595" y="195" class="text-small" text-anchor="middle" transform="rotate(-90 595 195)">EX/MEM</text>
+
+  <rect x="770" y="150" width="30" height="80" class="register" rx="2"/>
+  <text x="785" y="195" class="text-small" text-anchor="middle" transform="rotate(-90 785 195)">MEM/WB</text>
+
+  <!-- Register File -->
+  <rect x="180" y="450" width="180" height="120" class="register" rx="5"/>
+  <text x="270" y="475" class="text-title" text-anchor="middle">Register File</text>
+  <text x="270" y="495" class="text-small" text-anchor="middle">32 x 32-bit registers</text>
+  <text x="270" y="515" class="text-small" text-anchor="middle">Read Ports: rs1, rs2</text>
+  <text x="270" y="530" class="text-small" text-anchor="middle">Write Port: rd</text>
+  <text x="270" y="550" class="text-small" text-anchor="middle">Write Enable</text>
+
+  <!-- RF connections -->
+  <line x1="270" y1="300" x2="270" y2="450" class="arrow"/>
+  <text x="280" y="375" class="label-data">Read rs1, rs2</text>
+  
+  <!-- WB to RF write path - route around top of diagram, connect from top of WB stage -->
+  <path d="M 875 100 L 875 60 L 310 60 L 310 450" class="data-path"/>
+  <text x="590" y="55" class="label-data">WB → RF write</text>
+
+  <!-- Forwarding MUX Block - unified for both operands -->
+  <rect x="380" y="580" width="220" height="140" class="mux" rx="8"/>
+  <text x="490" y="605" class="text-title" text-anchor="middle">Forwarding MUX</text>
+  <text x="490" y="625" class="text-small" text-anchor="middle">Selects operand sources</text>
+  
+  <!-- Input section labels -->
+  <text x="390" y="650" class="text-small" fill="#0066cc">RF Inputs:</text>
+  <text x="390" y="665" class="text-small">• rs1 data</text>
+  <text x="390" y="680" class="text-small">• rs2 data</text>
+  
+  <!-- Forward section labels -->
+  <text x="500" y="650" class="text-small" fill="#cc0000">Forward Inputs:</text>
+  <text x="500" y="665" class="text-small">• EX stage</text>
+  <text x="500" y="680" class="text-small">• MEM stage</text>
+  <text x="500" y="695" class="text-small">• WB stage</text>
+  
+  <!-- Output labels -->
+  <text x="390" y="710" class="text-small" fill="#333">Outputs:</text>
+  <text x="490" y="710" class="text-small">→ ALU Operand A &amp; B</text>
+
+  <!-- Data from RF to MUX left side (normal path) -->
+  <path d="M 180 510 L 160 510 L 160 640 L 380 640" class="data-path"/>
+  <text x="250" y="635" class="label-data">RF rs1</text>
+
+  <path d="M 180 530 L 170 530 L 170 655 L 380 655" class="data-path"/>
+  <text x="250" y="650" class="label-data">RF rs2</text>
+
+  <!-- MUX output to EX stage ALU - connects from bottom of EX stage -->
+  <path d="M 490 580 L 490 310" class="arrow"/>
+  <text x="495" y="445" class="label-data">To ALU</text>
+
+  <!-- Forwarding paths - all come from right side, enter MUX cleanly -->
+  <!-- EX forwarding: from EX/MEM register to MUX right side top -->
+  <path d="M 595 230 L 595 320 L 650 320 L 650 600 L 600 600" class="forward-path"/>
+  <text x="655" y="420" class="label-forward">EX Forward</text>
+
+  <!-- MEM forwarding: from MEM/WB register to MUX right side middle -->
+  <path d="M 785 230 L 785 360 L 770 360 L 770 630 L 600 630" class="forward-path"/>
+  <text x="680" y="625" class="label-forward">MEM Forward</text>
+
+  <!-- WB forwarding: from WB stage to MUX right side bottom -->
+  <path d="M 875 300 L 875 370 L 960 370 L 960 660 L 600 660" class="forward-path"/>
+  <text x="780" y="655" class="label-forward">WB Forward</text>
+
+  <!-- Hazard Detection Unit -->
+  <rect x="50" y="450" width="100" height="120" class="hazard" rx="5"/>
+  <text x="100" y="475" class="text-title" text-anchor="middle" font-size="13">Hazard</text>
+  <text x="100" y="490" class="text-title" text-anchor="middle" font-size="13">Detection</text>
+  <text x="100" y="510" class="text-small" text-anchor="middle">Detects:</text>
+  <text x="100" y="525" class="text-small" text-anchor="middle">• Load-use</text>
+  <text x="100" y="540" class="text-small" text-anchor="middle">• RAW hazards</text>
+  <text x="100" y="555" class="text-small" text-anchor="middle">• Stall signal</text>
+
+  <!-- Connections to Hazard Unit -->
+  <!-- rs1, rs2 from ID stage to Hazard Detection - route down avoiding Register File -->
+  <path d="M 220 280 L 200 280 L 200 380 L 150 380 L 150 450" stroke="#cc0000" stroke-width="1.5" stroke-dasharray="3,2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="155" y="410" class="text-small" fill="#cc0000">rs1, rs2</text>
+  
+  <!-- rd_ex from EX stage to Hazard Detection - route around top, connect from top of EX stage -->
+  <path d="M 490 100 L 490 75 L 115 75 L 115 450" stroke="#009900" stroke-width="1.5" stroke-dasharray="3,2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="250" y="70" class="text-small" fill="#009900">rd_ex</text>
+
+  <!-- rd_mem from MEM stage to Hazard Detection - route around top, connect from top of MEM stage -->
+  <path d="M 690 100 L 690 85 L 85 85 L 85 450" stroke="#009900" stroke-width="1.5" stroke-dasharray="3,2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="390" y="80" class="text-small" fill="#009900">rd_mem</text>
+
+  <!-- Forwarding Control Unit -->
+  <rect x="420" y="760" width="240" height="110" class="hazard" rx="5"/>
+  <text x="540" y="785" class="text-title" text-anchor="middle" font-size="13">Forwarding Control Unit</text>
+  <text x="540" y="805" class="text-small" text-anchor="middle">Compares rs1/rs2 with rd_ex/rd_mem/rd_wb</text>
+  <text x="540" y="825" class="text-small" text-anchor="middle">Generates 2-bit select signals for each operand:</text>
+  <text x="540" y="840" class="text-small" text-anchor="middle">00: Use RF  01: Forward from EX</text>
+  <text x="540" y="855" class="text-small" text-anchor="middle">10: Forward from MEM  11: Forward from WB</text>
+
+  <!-- Connection to Forwarding Unit - single control path -->
+  <path d="M 490 720 L 490 760" stroke="#009900" stroke-width="1.5" stroke-dasharray="3,2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="495" y="745" class="text-small" fill="#009900">Control signals</text>
+
+  <!-- Example scenarios -->
+  <rect x="1000" y="100" width="370" height="280" style="fill:#f9f9f9; stroke:#666; stroke-width:1;" rx="5"/>
+  <text x="1185" y="125" class="text-title" text-anchor="middle">Forwarding Scenarios</text>
+
+  <!-- Scenario 1: EX Forwarding -->
+  <text x="1020" y="155" class="text-normal" font-weight="bold">1. EX-to-EX Forwarding (RAW hazard)</text>
+  <text x="1020" y="175" class="text-small" font-family="monospace">add x1, x2, x3  # EX:  x1 ← x2 + x3</text>
+  <text x="1020" y="190" class="text-small" font-family="monospace">sub x4, x1, x5  # ID:  needs x1 (in EX stage)</text>
+  <text x="1020" y="210" class="text-small">→ Forward ALU result from EX stage to EX input</text>
+  <text x="1020" y="225" class="text-small" fill="#cc0000">→ No stall needed, 0-cycle penalty</text>
+
+  <!-- Scenario 2: MEM Forwarding -->
+  <text x="1020" y="255" class="text-normal" font-weight="bold">2. MEM-to-EX Forwarding</text>
+  <text x="1020" y="275" class="text-small" font-family="monospace">add x1, x2, x3  # MEM: x1 result ready</text>
+  <text x="1020" y="290" class="text-small" font-family="monospace">nop             # EX</text>
+  <text x="1020" y="305" class="text-small" font-family="monospace">sub x4, x1, x5  # ID:  needs x1 (in MEM stage)</text>
+  <text x="1020" y="325" class="text-small">→ Forward result from MEM stage to EX input</text>
+  <text x="1020" y="340" class="text-small" fill="#cc0000">→ No stall needed, 0-cycle penalty</text>
+
+  <!-- Scenario 3: Load-use hazard -->
+  <rect x="1000" y="400" width="370" height="220" style="fill:#fff5f5; stroke:#cc0000; stroke-width:2;" rx="5"/>
+  <text x="1185" y="425" class="text-title" text-anchor="middle" fill="#cc0000">Load-Use Hazard (Stall Required)</text>
+
+  <text x="1020" y="455" class="text-normal" font-weight="bold">3. Load followed by dependent instruction</text>
+  <text x="1020" y="475" class="text-small" font-family="monospace">lw  x1, 0(x2)   # MEM: x1 not ready until MEM</text>
+  <text x="1020" y="490" class="text-small" font-family="monospace">sub x4, x1, x5  # EX:  needs x1 (not ready!)</text>
+  <text x="1020" y="510" class="text-small" fill="#cc0000">→ Must stall 1 cycle (insert bubble)</text>
+  <text x="1020" y="525" class="text-small">→ After stall:</text>
+  <text x="1020" y="545" class="text-small" font-family="monospace">lw  x1, 0(x2)   # WB:  x1 written to RF</text>
+  <text x="1020" y="560" class="text-small" font-family="monospace">bubble          # MEM</text>
+  <text x="1020" y="575" class="text-small" font-family="monospace">sub x4, x1, x5  # EX:  x1 forwarded from MEM</text>
+  <text x="1020" y="595" class="text-small" fill="#cc0000">→ 1-cycle penalty, then forward from MEM</text>
+
+  <!-- Key points -->
+  <rect x="1000" y="640" width="370" height="150" style="fill:#e6f7ff; stroke:#0066cc; stroke-width:1;" rx="5"/>
+  <text x="1185" y="665" class="text-title" text-anchor="middle">Key Points</text>
+  
+  <text x="1020" y="690" class="text-small">• <tspan font-weight="bold">Forwarding</tspan> eliminates most RAW hazards without stalls</text>
+  <text x="1020" y="705" class="text-small">• <tspan font-weight="bold">EX/MEM/WB forwarding</tspan> covers different pipeline distances</text>
+  <text x="1020" y="720" class="text-small">• <tspan font-weight="bold">Load-use hazard</tspan> requires 1-cycle stall (data not ready)</text>
+  <text x="1020" y="735" class="text-small">• <tspan font-weight="bold">Hazard detection</tspan> compares register indices (rs1/rs2 vs rd)</text>
+  <text x="1020" y="750" class="text-small">• <tspan font-weight="bold">Forwarding control</tspan> selects correct data source via MUX</text>
+  <text x="1020" y="765" class="text-small">• <tspan font-weight="bold">Priority</tspan>: EX forward &gt; MEM forward &gt; WB forward &gt; RF read</text>
+
+  <!-- Bottom notes -->
+  <text x="50" y="890" class="text-small" fill="#666">RAW: Read-After-Write data dependency</text>
+  <text x="50" y="905" class="text-small" fill="#666">Forwarding reduces CPI by avoiding unnecessary stalls</text>
+  <text x="50" y="920" class="text-small" fill="#666">Hardware cost: comparators + multiplexers + control logic</text>
+
+  <!-- Legend -->
+  <text x="50" y="950" class="text-small" font-weight="bold">Path Types:</text>
+  
+  <line x1="50" y1="970" x2="100" y2="970" class="arrow"/>
+  <text x="110" y="975" class="text-small">Internal connection (RF read, MUX output)</text>
+  
+  <line x1="50" y1="990" x2="100" y2="990" class="data-path"/>
+  <text x="110" y="995" class="text-small">Data path (RF→MUX normal flow, WB→RF write)</text>
+
+  <line x1="50" y1="1010" x2="100" y2="1010" class="forward-path"/>
+  <text x="110" y="1015" class="text-small">Forwarding path (EX/MEM/WB bypass to MUX)</text>
+
+  <line x1="50" y1="1030" x2="100" y2="1030" stroke="#009900" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <text x="110" y="1035" class="text-small">Control signal (hazard detection, MUX select)</text>
+
+</svg>

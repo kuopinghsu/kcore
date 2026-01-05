@@ -1,0 +1,13 @@
+build
+dump.fst
+dump.fst.hier
+rtl_trace.txt
+verif/formal_configs/formal_basic
+verif/formal_configs/formal_basic_bmc
+verif/formal_configs/formal_basic_cover
+verif/formal_configs/results
+rtos/zephyr/.venv
+rtos/zephyr/build.*
+syn/*.log
+syn/reports
+syn/results
