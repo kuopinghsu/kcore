@@ -8,13 +8,19 @@ MEMORY
     RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 2M
 }
 
+PHDRS
+{
+    text PT_LOAD FLAGS(5);  /* Read + Execute */
+    data PT_LOAD FLAGS(6);  /* Read + Write */
+}
+
 SECTIONS
 {
     .text : {
         *(.text.init)
         *(.text*)
         *(.rodata*)
-    } > RAM
+    } > RAM :text
 
     /* C++ initialization sections */
     .init : {
@@ -57,7 +63,7 @@ SECTIONS
     .data : {
         *(.data*)
         *(.sdata*)
-    } > RAM
+    } > RAM :data
 
     .bss : {
         __bss_start = .;
@@ -70,7 +76,7 @@ SECTIONS
         . += 8;
         fromhost = .;
         . += 8;
-    } > RAM
+    } > RAM :data
 
     /* Stack section - heap and stack share remaining memory */
     .stack : {

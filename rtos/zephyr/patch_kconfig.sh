@@ -21,6 +21,12 @@ if [ ! -f "${KCONFIG_PY}.orig" ]; then
     cp "$KCONFIG_PY" "${KCONFIG_PY}.orig"
 fi
 
+# Check if already patched by looking for our modified pattern
+if grep -q 'warn_only = r"warning:.\*(set more than once|choice symbol|default selection|was assigned the value|has direct dependencies)"' "$KCONFIG_PY"; then
+    echo "kconfig.py is already patched, skipping."
+    exit 0
+fi
+
 # Patch: Change the error logic to allow warnings that match warn_only pattern
 # The original code has: error_out = True, then checks "if not error_out ..." which never runs
 # We need to change the logic to check each warning and only error if it doesn't match warn_only

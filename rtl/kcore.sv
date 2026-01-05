@@ -804,11 +804,13 @@ module kcore #(
                 case (ex_mem_reg.funct3[1:0])
                     2'b01: mem_misaligned = (ex_mem_reg.alu_result[0] != 1'b0); // LH, LHU
                     2'b10: mem_misaligned = (ex_mem_reg.alu_result[1:0] != 2'b00); // LW
+                    default: mem_misaligned = 1'b0; // LB, LBU - no alignment requirement
                 endcase
             end else if (ex_mem_reg.opcode == OP_STORE) begin
                 case (ex_mem_reg.funct3[1:0])
                     2'b01: mem_misaligned = (ex_mem_reg.alu_result[0] != 1'b0); // SH
                     2'b10: mem_misaligned = (ex_mem_reg.alu_result[1:0] != 2'b00); // SW
+                    default: mem_misaligned = 1'b0; // SB - no alignment requirement
                 endcase
             end
         end

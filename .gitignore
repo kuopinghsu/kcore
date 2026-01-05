@@ -1,4 +1,5 @@
 build
+rtos/nuttx/build.*
 dump.fst
 dump.fst.hier
 rtl_trace.txt

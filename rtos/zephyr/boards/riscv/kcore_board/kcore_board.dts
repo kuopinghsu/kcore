@@ -50,7 +50,7 @@
 			reg = <0x80000000 0x200000>;  /* 2MB */
 		};
 
-		mtimer: timer@2000000 {
+		mtimer: timer@200bff8 {
 			compatible = "riscv,machine-timer";
 			reg = <0x0200bff8 0x08    /* mtime */
 			       0x02004000 0x08>;  /* mtimecmp */

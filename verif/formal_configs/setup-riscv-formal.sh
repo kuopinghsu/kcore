@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 RISCV_FORMAL="$PROJECT_ROOT/verif/riscv-formal"
 INTEGRATION_DIR="$SCRIPT_DIR/riscv-formal-integration"
 CORES_DIR="$RISCV_FORMAL/cores/kcore"

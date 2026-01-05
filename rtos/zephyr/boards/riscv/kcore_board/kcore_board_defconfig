@@ -4,7 +4,8 @@
 # SoC configuration
 CONFIG_SOC_RISCV_KCORE=y
 
-# Console - use magic address driver for fast simulation
+# Serial and Console configuration
+CONFIG_SERIAL=y
 CONFIG_CONSOLE=y
 CONFIG_CONSOLE_KCORE=y
 CONFIG_PRINTK=y

@@ -3,8 +3,6 @@
 
 config CONSOLE_KCORE
 	bool "kcore magic address console driver"
-	depends on CONSOLE
-	select CONSOLE_HAS_DRIVER
 	help
 	  Enable console driver that writes to magic address 0xFFFFFFF4.
 	  This is useful for simulation/testbench where characters written

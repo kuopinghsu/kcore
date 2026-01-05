@@ -19,6 +19,9 @@ OBJCOPY = $(RISCV_PREFIX)objcopy
 OBJDUMP = $(RISCV_PREFIX)objdump
 SIZE = $(RISCV_PREFIX)size
 
+# Get the directory containing the RISC-V toolchain binaries
+RISCV_PREFIX_DIR = $(dir $(shell which $(CC)))
+
 # Directories
 RTL_DIR = rtl
 TB_DIR = testbench
@@ -89,7 +92,6 @@ MEM_DUAL_PORT ?= 1
 
 # Verilator flags (common)
 VLT_FLAGS_COMMON = -Wall -Wno-fatal --cc --exe --build --top-module tb_soc
-VLT_FLAGS_COMMON += -LDFLAGS "-lpthread"
 VLT_FLAGS_COMMON += -Wno-UNOPTFLAT -Wno-WIDTH -Wno-UNUSED -Wno-TIMESCALEMOD
 VLT_FLAGS_COMMON += -GMEM_READ_LATENCY=$(MEM_READ_LATENCY) -GMEM_WRITE_LATENCY=$(MEM_WRITE_LATENCY) -GMEM_DUAL_PORT=$(MEM_DUAL_PORT)
 VLT_FLAGS_COMMON += -CFLAGS "-DMEM_READ_LATENCY=$(MEM_READ_LATENCY) -DMEM_WRITE_LATENCY=$(MEM_WRITE_LATENCY) -DMEM_DUAL_PORT=$(MEM_DUAL_PORT)"
@@ -187,6 +189,7 @@ help:
 	@echo "  syn / syn-info           - Show detailed help for synthesis"
 	@echo "  freertos / freertos-info - Show detailed help for FreeRTOS integration"
 	@echo "  zephyr / zephyr-info     - Show detailed help for Zephyr RTOS"
+	@echo "  nuttx / nuttx-help       - Show detailed help for NuttX RTOS"
 	@echo "  arch-test / arch-test-info - Show detailed help for architectural tests"
 	@echo ""
 	@echo "Note: Use <test>=all to run for all tests in sw/ directory"
@@ -211,6 +214,17 @@ help:
 	@echo "  zephyr-clean-all       - Clean Zephyr build and virtual environment"
 	@echo "  Example: make zephyr-rtl-hello_world TRACE=1 MAX_CYCLES=0"
 	@echo "  (Use 'make zephyr-info' for detailed help)"
+	@echo ""
+	@echo "NuttX RTOS Targets:"
+	@echo "  nuttx-hello            - Build NuttX with hello world sample"
+	@echo "  nuttx-nsh              - Build NuttX with NuttShell"
+	@echo "  nuttx-rtl-hello        - Run hello in RTL simulation"
+	@echo "  nuttx-rtl-nsh          - Run NSH in RTL simulation"
+	@echo "  nuttx-sim-hello        - Run hello in C++ simulation"
+	@echo "  nuttx-compare-hello    - Compare hello RTL vs C++ traces"
+	@echo "  nuttx-clean            - Clean NuttX builds"
+	@echo "  Example: make nuttx-rtl-hello TRACE=1"
+	@echo "  (Use 'make nuttx-help' for detailed help)"
 	@echo ""
 	@echo "Formal Verification:"
 	@echo "  formal-info      - Show formal verification setup and info"
@@ -1110,47 +1124,8 @@ zephyr-venv-setup:
 	@echo "=== Zephyr virtual environment ready ==="
 	@echo "To activate: source $(ZEPHYR_VENV)/bin/activate"
 
-# Pattern rule for Zephyr tests: zephyr-<sample> builds rtos/zephyr/samples/<sample>
-# Output to standard test.bin/test.elf files for consistency
-.PHONY: zephyr-%
-zephyr-%: $(BUILD_DIR) zephyr-venv-setup
-	@echo "=== Building Zephyr Sample: $* ==="
-	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
-		echo "Error: $(ZEPHYR_SAMPLES)/$* not found"; \
-		exit 1; \
-	fi
-	@echo "zephyr-$*" > $(TEST_MARKER)
-	@echo "Setting up Zephyr build environment..."
-	@echo "Using RISC-V toolchain: $(RISCV_PREFIX)"
-	@if [ ! -d "$(ZEPHYR_BASE)" ]; then \
-		echo "Error: ZEPHYR_BASE directory not found: $(ZEPHYR_BASE)"; \
-		echo "Please set ZEPHYR_BASE to point to your Zephyr installation"; \
-		echo "or install Zephyr with: west init ~/zephyrproject && cd ~/zephyrproject && west update"; \
-		exit 1; \
-	fi
-	@. $(ZEPHYR_VENV)/bin/activate && \
-		export ZEPHYR_BASE=$(ZEPHYR_BASE) && \
-		export ZEPHYR_TOOLCHAIN_VARIANT=$(ZEPHYR_TOOLCHAIN_VARIANT) && \
-		export CROSS_COMPILE=$(ZEPHYR_CROSS_COMPILE) && \
-		export ZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) && \
-		export KCONFIG_WARN_UNDEF=n && \
-		rm -rf $(ZEPHYR_DIR)/build.$* && \
-		cmake -S $(ZEPHYR_SAMPLES)/$* -B $(ZEPHYR_DIR)/build.$* -GNinja -DBOARD=kcore_board \
-			-DZEPHYR_BASE=$(ZEPHYR_BASE) \
-			-DZEPHYR_TOOLCHAIN_VARIANT=$(ZEPHYR_TOOLCHAIN_VARIANT) \
-			-DCROSS_COMPILE=$(ZEPHYR_CROSS_COMPILE) \
-			-DZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) \
-			-DKCONFIG_WERROR=OFF && \
-		cmake --build $(ZEPHYR_DIR)/build.$*
-	@echo "Converting to binary format..."
-	@cp $(ZEPHYR_DIR)/build.$*/zephyr/zephyr.elf $(BUILD_DIR)/test.elf
-	$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
-	$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
-	$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
-	@echo "=== Zephyr sample built successfully ==="
-	@$(SIZE) $(BUILD_DIR)/test.elf
-
 # Pattern rule for running Zephyr tests in RTL simulation
+# Must be defined before generic zephyr-% to take precedence
 .PHONY: zephyr-rtl-%
 zephyr-rtl-%: build-verilator-only
 	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
@@ -1176,6 +1151,7 @@ zephyr-rtl-%: build-verilator-only
 	@echo "=== Zephyr test complete ==="
 
 # Pattern rule for running Zephyr tests in ISS simulator
+# Must be defined before generic zephyr-% to take precedence
 .PHONY: zephyr-sim-%
 zephyr-sim-%: build-sim
 	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
@@ -1191,6 +1167,7 @@ zephyr-sim-%: build-sim
 	@echo "=== Zephyr simulator test complete ==="
 
 # Pattern rule for comparing Zephyr RTL vs Spike traces
+# Must be defined before generic zephyr-% to take precedence
 .PHONY: zephyr-compare-%
 zephyr-compare-%:
 	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
@@ -1206,6 +1183,53 @@ zephyr-compare-%:
 	@$(SPIKE) --isa=rv32ima -m0x80000000:0x200000 $(BUILD_DIR)/test.elf 2>&1 | tee $(BUILD_DIR)/spike_output.log
 	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_output.log
 
+# Pattern rule for Zephyr tests: zephyr-<sample> builds rtos/zephyr/samples/<sample>
+# Output to standard test.bin/test.elf files for consistency
+.PHONY: zephyr-%
+zephyr-%: $(BUILD_DIR) zephyr-venv-setup
+	@echo "=== Building Zephyr Sample: $* ==="
+	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
+		echo "Error: $(ZEPHYR_SAMPLES)/$* not found"; \
+		exit 1; \
+	fi
+	@echo "zephyr-$*" > $(TEST_MARKER)
+	@echo "Setting up Zephyr build environment..."
+	@echo "Using RISC-V toolchain: $(RISCV_PREFIX)"
+	@if [ ! -d "$(ZEPHYR_BASE)" ]; then \
+		echo "Error: ZEPHYR_BASE directory not found: $(ZEPHYR_BASE)"; \
+		echo "Please set ZEPHYR_BASE to point to your Zephyr installation"; \
+		echo "or install Zephyr with: west init ~/zephyrproject && cd ~/zephyrproject && west update"; \
+		exit 1; \
+	fi
+	@# Auto-patch Zephyr kconfig.py to allow warnings from upstream SoCs
+	@if [ -f "$(ZEPHYR_BASE)/scripts/kconfig/kconfig.py" ] && \
+	   ! grep -q "# PATCHED: Skip error on warnings" "$(ZEPHYR_BASE)/scripts/kconfig/kconfig.py"; then \
+		echo "Note: Patching Zephyr kconfig.py to allow warnings from upstream SoCs..."; \
+		export ZEPHYR_BASE=$(ZEPHYR_BASE) && bash $(ZEPHYR_DIR)/patch_kconfig.sh || \
+		(echo "Warning: Could not patch kconfig.py. Build may fail due to upstream Zephyr warnings."; true); \
+	fi
+	@. $(ZEPHYR_VENV)/bin/activate && \
+		export ZEPHYR_BASE=$(ZEPHYR_BASE) && \
+		export ZEPHYR_TOOLCHAIN_VARIANT=$(ZEPHYR_TOOLCHAIN_VARIANT) && \
+		export CROSS_COMPILE=$(ZEPHYR_CROSS_COMPILE) && \
+		export ZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) && \
+		rm -rf $(ZEPHYR_DIR)/build.$* && \
+		cd $(ZEPHYR_SAMPLES)/$* && \
+		west build -p -b kcore_board -d $(shell pwd)/$(ZEPHYR_DIR)/build.$* -- \
+			-DZEPHYR_BASE=$(ZEPHYR_BASE) \
+			-DZEPHYR_TOOLCHAIN_VARIANT=$(ZEPHYR_TOOLCHAIN_VARIANT) \
+			-DCROSS_COMPILE=$(ZEPHYR_CROSS_COMPILE) \
+			-DZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) \
+			-DKCONFIG_ERROR_ON_WARNINGS=OFF
+
+	@echo "Converting to binary format..."
+	@cp $(ZEPHYR_DIR)/build.$*/zephyr/zephyr.elf $(BUILD_DIR)/test.elf
+	$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
+	$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
+	$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
+	@echo "=== Zephyr sample built successfully ==="
+	@$(SIZE) $(BUILD_DIR)/test.elf
+
 # Clean Zephyr build directories
 .PHONY: zephyr-clean
 zephyr-clean:
@@ -1220,4 +1244,140 @@ zephyr-clean-all:
 	@rm -rf $(ZEPHYR_DIR)/build.*
 	@rm -rf $(ZEPHYR_VENV)
 	@echo "Zephyr build and virtual environment removed"
+
+################################################################################
+# NuttX RTOS targets
+################################################################################
+
+# NuttX configuration
+NUTTX_DIR = rtos/nuttx
+NUTTX_BASE ?= $(HOME)/NuttX/nuttx
+NUTTX_APPS ?= $(HOME)/NuttX/apps
+NUTTX_BOARD = kcore-board
+NUTTX_CONFIG = nsh
+
+# Check if NuttX is installed
+check-nuttx:
+	@if [ ! -d "$(NUTTX_BASE)" ]; then \
+		echo "Error: NuttX not found at $(NUTTX_BASE)"; \
+		echo "Please install NuttX:"; \
+		echo "  mkdir -p ~/NuttX && cd ~/NuttX"; \
+		echo "  git clone https://github.com/apache/nuttx.git nuttx"; \
+		echo "  git clone https://github.com/apache/nuttx-apps.git apps"; \
+		echo "Or set NUTTX_BASE to your NuttX installation"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(NUTTX_APPS)" ]; then \
+		echo "Error: NuttX apps not found at $(NUTTX_APPS)"; \
+		echo "Please install NuttX apps:"; \
+		echo "  cd ~/NuttX"; \
+		echo "  git clone https://github.com/apache/nuttx-apps.git apps"; \
+		echo "Or set NUTTX_APPS to your NuttX apps installation"; \
+		exit 1; \
+	fi
+
+# Build NuttX with hello sample
+.PHONY: nuttx-hello
+nuttx-hello: check-nuttx
+	@echo "Building NuttX with hello sample..."
+	@mkdir -p $(NUTTX_BASE)/../build-hello
+	@# Copy board files to NuttX tree
+	@mkdir -p $(NUTTX_BASE)/boards/risc-v/kcore
+	@cp -r $(NUTTX_DIR)/boards/risc-v/kcore/kcore-board $(NUTTX_BASE)/boards/risc-v/kcore/
+	@# Copy driver files
+	@mkdir -p $(NUTTX_BASE)/drivers/serial
+	@cp $(NUTTX_DIR)/drivers/serial/uart_kcore.c $(NUTTX_BASE)/drivers/serial/
+	@if [ ! -f $(NUTTX_BASE)/drivers/serial/Make.defs.orig ]; then \
+		cp $(NUTTX_BASE)/drivers/serial/Make.defs $(NUTTX_BASE)/drivers/serial/Make.defs.orig; \
+	fi
+	@cat $(NUTTX_BASE)/drivers/serial/Make.defs.orig $(NUTTX_DIR)/drivers/serial/Make.defs > $(NUTTX_BASE)/drivers/serial/Make.defs
+	@# Copy hello sample to apps
+	@mkdir -p $(NUTTX_APPS)/examples/hello_kcore
+	@cp $(NUTTX_DIR)/samples/hello/* $(NUTTX_APPS)/examples/hello_kcore/
+	@# Configure and build
+	@cd $(NUTTX_BASE) && \
+		export PATH=$(RISCV_PREFIX_DIR):$(PATH) && \
+		export CROSS_COMPILE=$(RISCV_PREFIX) && \
+		make distclean && \
+		./tools/configure.sh kcore-board:nsh && \
+		make -j$(shell nproc)
+	@# Copy output files
+	@mkdir -p $(BUILD_DIR)
+	@cp $(NUTTX_BASE)/nuttx $(BUILD_DIR)/test.elf
+	@$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
+	@$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
+	@$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
+	@echo "nuttx-hello" > $(TEST_MARKER)
+	@echo "=== NuttX hello sample built successfully ==="
+	@$(SIZE) $(BUILD_DIR)/test.elf
+
+# Build NuttX with NSH (NuttShell) sample
+.PHONY: nuttx-nsh
+nuttx-nsh: nuttx-hello
+	@echo "NuttX NSH already built with nuttx-hello target"
+
+# Run NuttX hello in RTL simulation
+.PHONY: nuttx-rtl-hello
+nuttx-rtl-hello: nuttx-hello rtl-verilator-build
+	@echo "=== Running NuttX hello in RTL simulation ==="
+	@echo "nuttx-rtl-hello" > $(TEST_MARKER)
+	@if [ "$(WAVE)" = "fst" ]; then \
+		$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/test.fst; \
+	elif [ "$(WAVE)" = "vcd" ]; then \
+		mkdir -p $(VLT_VCD_DIR); \
+		$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt $(VLT_VCD_DIR)/test.vcd; \
+	else \
+		$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt; \
+	fi
+	@echo "=== NuttX RTL simulation completed ==="
+
+# Run NuttX hello in C++ simulation
+.PHONY: nuttx-sim-hello
+nuttx-sim-hello: nuttx-hello $(SIM_EXEC)
+	@echo "=== Running NuttX hello in C++ simulation ==="
+	@echo "nuttx-sim-hello" > $(TEST_MARKER)
+	$(SIM_EXEC) $(SW_BIN) $(BUILD_DIR)/sim_trace.txt
+	@echo "=== NuttX C++ simulation completed ==="
+
+# Compare NuttX RTL and C++ simulation traces
+.PHONY: nuttx-compare-hello
+nuttx-compare-hello: nuttx-rtl-hello nuttx-sim-hello
+	@echo "=== Comparing NuttX hello traces ==="
+	python3 $(SIM_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
+	@echo "=== Trace comparison completed ==="
+
+# Aliases for NSH
+.PHONY: nuttx-rtl-nsh nuttx-sim-nsh nuttx-compare-nsh
+nuttx-rtl-nsh: nuttx-rtl-hello
+nuttx-sim-nsh: nuttx-sim-hello
+nuttx-compare-nsh: nuttx-compare-hello
+
+# Clean NuttX builds
+.PHONY: nuttx-clean
+nuttx-clean:
+	@echo "Cleaning NuttX builds..."
+	@if [ -d "$(NUTTX_BASE)" ]; then \
+		cd $(NUTTX_BASE) && make distclean; \
+	fi
+	@rm -rf $(NUTTX_BASE)/../build-*
+	@echo "NuttX builds cleaned"
+
+# Help for NuttX targets
+.PHONY: nuttx-help
+nuttx-help:
+	@echo "NuttX RTOS targets:"
+	@echo "  nuttx-hello          - Build NuttX with hello world sample"
+	@echo "  nuttx-nsh            - Build NuttX with NuttShell (NSH)"
+	@echo "  nuttx-rtl-hello      - Run hello in RTL simulation"
+	@echo "  nuttx-rtl-nsh        - Run NSH in RTL simulation"
+	@echo "  nuttx-sim-hello      - Run hello in C++ simulation"
+	@echo "  nuttx-sim-nsh        - Run NSH in C++ simulation"
+	@echo "  nuttx-compare-hello  - Compare hello RTL vs C++ traces"
+	@echo "  nuttx-compare-nsh    - Compare NSH RTL vs C++ traces"
+	@echo "  nuttx-clean          - Clean NuttX builds"
+	@echo ""
+	@echo "Prerequisites:"
+	@echo "  - NuttX must be installed at $(NUTTX_BASE)"
+	@echo "  - NuttX apps at $(NUTTX_APPS)"
+	@echo "  - Or set NUTTX_BASE and NUTTX_APPS environment variables"
 
