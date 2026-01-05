@@ -38,7 +38,7 @@
 /* Memory configuration */
 
 #define KCORE_MEM_BASE          0x80000000
-#define KCORE_MEM_SIZE          0x10000    /* 64 KB */
+#define KCORE_MEM_SIZE          0x200000   /* 2 MB */
 
 /* Peripheral base addresses */
 

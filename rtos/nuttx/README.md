@@ -65,7 +65,7 @@ make nuttx-clean
 
 The board configuration is based on:
 - Architecture: RV32IMA with Zicsr and Zifencei
-- Memory: 64KB at 0x80000000
+- Memory: 2MB at 0x80000000
 - Peripherals:
   - UART0 at 0x10000000 (115200 8N1)
   - CLINT timer at 0x200bff8
