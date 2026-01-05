@@ -1,0 +1,24 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+if ARCH_BOARD_KCORE
+
+config KCORE_UART0
+	bool "UART0 Support"
+	default y
+	select ARCH_HAVE_SERIAL_TERMIOS
+	---help---
+		Enable UART0 serial console support
+
+config KCORE_UART0_BASE
+	hex "UART0 Base Address"
+	default 0x10000000
+	depends on KCORE_UART0
+
+config KCORE_CLINT_BASE
+	hex "CLINT Base Address"
+	default 0x200bff8
+
+endif # ARCH_BOARD_KCORE

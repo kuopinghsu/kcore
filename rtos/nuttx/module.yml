@@ -1,0 +1,16 @@
+# NuttX module configuration
+# This file tells NuttX where to find kcore board and driver files
+
+MODULE_NAME = kcore
+
+# Board support
+BOARD_ARCH = risc-v
+BOARD_VENDOR = kcore
+BOARD_NAME = kcore-board
+
+# Driver support  
+DRIVER_SERIAL = y
+
+# This directory contains:
+# - boards/risc-v/kcore/kcore-board/ - Board support package
+# - drivers/serial/ - UART driver
