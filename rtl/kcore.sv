@@ -351,7 +351,13 @@ module kcore #(
         end else if (interrupt_taken) begin
             pc_next = mtvec;
         end else if (take_branch) begin
-            pc_next = branch_target;
+            // For JAL/JALR in current EX stage, use the branch_target calculated combinationally
+            // For branches from EX/MEM pipeline, use ex_mem_reg.branch_target
+            if ((id_ex_reg.opcode == OP_JAL) || (id_ex_reg.opcode == OP_JALR)) begin
+                pc_next = branch_target;  // Use combinationally calculated target for JAL/JALR
+            end else begin
+                pc_next = ex_mem_reg.branch_target;  // Use registered target for branches
+            end
         end else if (if_id_reg.valid && !stall_ex && !flush_ex) begin
             // Increment PC when instruction advances from ID to EX stage
             // This ensures PC only increments once per instruction consumed by the pipeline
@@ -1335,12 +1341,16 @@ module kcore #(
             assign rvfi_pc_rdata = mem_wb_reg.pc;
             // Next PC calculation - account for branches/jumps
             logic [31:0] next_pc;
+            logic [31:0] branch_target_from_ex_mem;
             always_comb begin
+                // Get branch_target from ex_mem_reg which was calculated in ID/EX stage
+                branch_target_from_ex_mem = ex_mem_reg.branch_target;
+                
                 case (mem_wb_reg.opcode)
-                    OP_JAL, OP_JALR: next_pc = {mem_wb_reg.alu_result[31:2], 2'b00};  // Jump target (force align)
+                    OP_JAL, OP_JALR: next_pc = {branch_target_from_ex_mem[31:2], 2'b00};  // Jump target (force align)
                     OP_BRANCH: begin
                         if (ex_mem_reg.branch_taken && ex_mem_reg.pc == mem_wb_reg.pc) begin
-                            next_pc = {ex_mem_reg.branch_target[31:2], 2'b00};  // Branch target (force align)
+                            next_pc = {branch_target_from_ex_mem[31:2], 2'b00};  // Branch target (force align)
                         end else begin
                             next_pc = mem_wb_reg.pc + 32'd4;
                         end

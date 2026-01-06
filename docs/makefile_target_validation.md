@@ -123,7 +123,7 @@ $ make zephyr-rtl-aa
 Error: Zephyr sample 'aa' not found
 Expected directory: rtos/zephyr/samples/aa
 Available samples:
-  hello_world
+  hello
   threads_sync
   uart_echo
 make: *** [Makefile:927: zephyr-rtl-aa] Error 1
@@ -208,7 +208,7 @@ make zephyr-compare-aa        # ✅ Shows available Zephyr samples
 
 # Valid tests still work
 make rtl-simple               # ✅ Runs successfully
-make zephyr-rtl-hello_world   # ✅ Runs successfully
+make zephyr-rtl-hello   # ✅ Runs successfully
 ```
 
 ## Files Modified

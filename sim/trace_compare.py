@@ -27,15 +27,23 @@ def parse_rtl_trace(filename):
     return traces
 
 def parse_spike_trace(filename):
-    """Parse Spike trace file"""
+    """Parse Spike trace file (handles both -l and --log-commits formats)"""
     traces = []
     with open(filename, 'r') as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
-            # Spike format: core   0: 3 0x80000000 (0x00000297) ...
-            # The number after colon is the privilege level
+            # Try Spike format with -l flag: core   0: 0x80000000 (0x00000297) ...
+            match = re.match(r'core\s+\d+:\s+0x([0-9a-fA-F]+)\s+\(0x([0-9a-fA-F]+)\)', line)
+            if match:
+                pc, instr = match.groups()
+                traces.append({
+                    'pc': int(pc, 16),
+                    'instr': int(instr, 16)
+                })
+                continue
+            # Try Spike format with --log-commits: core   0: 3 0x80000000 (0x00000297) ...
             match = re.match(r'core\s+\d+:\s+\d+\s+0x([0-9a-fA-F]+)\s+\(0x([0-9a-fA-F]+)\)', line)
             if match:
                 pc, instr = match.groups()

@@ -29,10 +29,33 @@ This directory contains NuttX RTOS integration for the kcore RISC-V processor.
    - Use xpack-riscv-none-elf-gcc or similar
 
 3. Install kconfig-frontends:
+   
+   **macOS:**
    ```bash
-   # macOS
-   brew install kconfig-frontends
+   # kconfig-frontends is not available via Homebrew
+   # Build from source using NuttX tools repository
+   cd /tmp
+   git clone https://bitbucket.org/nuttx/tools.git nuttx-tools
+   cd nuttx-tools/kconfig-frontends
+   
+   # Configure and build
+   ./configure --prefix=$HOME/.local --enable-mconf --disable-gconf --disable-qconf
+   make -j$(sysctl -n hw.ncpu)
+   make install
+   
+   # Verify installation
+   ls ~/.local/bin/kconfig-*
    ```
+   
+   **Linux:**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install kconfig-frontends
+   
+   # Or build from source (same as macOS instructions above)
+   ```
+   
+   **Note:** Make sure `~/.local/bin` is in your PATH (already configured in env.config via PATH_APPEND)
 
 ## Building NuttX Applications
 

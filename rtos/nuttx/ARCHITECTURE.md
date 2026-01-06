@@ -233,23 +233,6 @@ Base: 0x10000000
 └─────────────┴────────┴─────────────────────────────┘
 ```
 
-## Comparison: NuttX vs Zephyr vs FreeRTOS
-
-```
-┌──────────────┬────────────┬────────────┬────────────┐
-│   Feature    │   NuttX    │   Zephyr   │  FreeRTOS  │
-├──────────────┼────────────┼────────────┼────────────┤
-│ POSIX API    │    Yes     │  Partial   │     No     │
-│ Shell        │    NSH     │   Zephyr   │  Optional  │
-│ File Systems │    Yes     │    Yes     │  Optional  │
-│ Networking   │    Yes     │    Yes     │  Optional  │
-│ Device Tree  │     No     │    Yes     │     No     │
-│ Build System │GNU Make    │ West/CMake │    Make    │
-│ Memory       │  ~20-40KB  │  ~20-60KB  │  ~10-20KB  │
-│ License      │  Apache 2  │  Apache 2  │    MIT     │
-└──────────────┴────────────┴────────────┴────────────┘
-```
-
 ## Files Created
 
 ### Board Support Package

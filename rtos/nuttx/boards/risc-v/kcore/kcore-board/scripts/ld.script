@@ -20,7 +20,7 @@
 
 OUTPUT_ARCH("riscv")
 
-ENTRY(_start)
+ENTRY(__start)
 
 MEMORY
 {
@@ -63,6 +63,8 @@ SECTIONS
 
   _eronly = LOADADDR(.data);
 
+  PROVIDE(__global_pointer$ = _sdata + ((_edata - _sdata) / 2));
+
   .bss :
   {
     _sbss = ABSOLUTE(.);
@@ -72,6 +74,13 @@ SECTIONS
     *(COMMON)
     . = ALIGN(4);
     _ebss = ABSOLUTE(.);
+    
+    /* Spike/ISA simulator communication */
+    . = ALIGN(8);
+    tohost = .;
+    . += 8;
+    fromhost = .;
+    . += 8;
   } > ksram
 
   /* Stabs debugging sections */

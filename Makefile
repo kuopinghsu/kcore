@@ -189,7 +189,7 @@ help:
 	@echo "  syn / syn-info           - Show detailed help for synthesis"
 	@echo "  freertos / freertos-info - Show detailed help for FreeRTOS integration"
 	@echo "  zephyr / zephyr-info     - Show detailed help for Zephyr RTOS"
-	@echo "  nuttx / nuttx-help       - Show detailed help for NuttX RTOS"
+	@echo "  nuttx / nuttx-info       - Show detailed help for NuttX RTOS"
 	@echo "  arch-test / arch-test-info - Show detailed help for architectural tests"
 	@echo ""
 	@echo "Note: Use <test>=all to run for all tests in sw/ directory"
@@ -206,25 +206,23 @@ help:
 	@echo ""
 	@echo "Zephyr RTOS Targets:"
 	@echo "  zephyr-venv-setup      - Set up Python virtual environment for Zephyr"
-	@echo "  zephyr-<sample>        - Build Zephyr sample (e.g., zephyr-hello_world)"
+	@echo "  zephyr-<sample>        - Build Zephyr sample (e.g., zephyr-hello)"
 	@echo "  zephyr-rtl-<sample>    - Run Zephyr sample in RTL simulation"
 	@echo "  zephyr-sim-<sample>    - Run Zephyr sample in ISS simulator"
 	@echo "  zephyr-compare-<sample> - Compare Zephyr RTL vs Spike traces"
 	@echo "  zephyr-clean           - Clean Zephyr build directory"
 	@echo "  zephyr-clean-all       - Clean Zephyr build and virtual environment"
-	@echo "  Example: make zephyr-rtl-hello_world TRACE=1 MAX_CYCLES=0"
+	@echo "  Example: make zephyr-rtl-hello TRACE=1 MAX_CYCLES=0"
 	@echo "  (Use 'make zephyr-info' for detailed help)"
 	@echo ""
 	@echo "NuttX RTOS Targets:"
-	@echo "  nuttx-hello            - Build NuttX with hello world sample"
-	@echo "  nuttx-nsh              - Build NuttX with NuttShell"
-	@echo "  nuttx-rtl-hello        - Run hello in RTL simulation"
-	@echo "  nuttx-rtl-nsh          - Run NSH in RTL simulation"
-	@echo "  nuttx-sim-hello        - Run hello in C++ simulation"
-	@echo "  nuttx-compare-hello    - Compare hello RTL vs C++ traces"
-	@echo "  nuttx-clean            - Clean NuttX builds"
-	@echo "  Example: make nuttx-rtl-hello TRACE=1"
-	@echo "  (Use 'make nuttx-help' for detailed help)"
+	@echo "  nuttx-<sample>          - Build NuttX sample (e.g., nuttx-hello)"
+	@echo "  nuttx-rtl-<sample>      - Run NuttX sample in RTL simulation"
+	@echo "  nuttx-sim-<sample>      - Run NuttX sample in Spike ISS simulator"
+	@echo "  nuttx-compare-<sample>  - Compare NuttX RTL vs Spike traces"
+	@echo "  nuttx-clean             - Clean NuttX builds"
+	@echo "  Example: make nuttx-rtl-hello TRACE=1 MAX_CYCLES=0"
+	@echo "  (Use 'make nuttx-info' for detailed help)"
 	@echo ""
 	@echo "Formal Verification:"
 	@echo "  formal-info      - Show formal verification setup and info"
@@ -500,7 +498,7 @@ freertos-sim-%: build-sim
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test in Simulator: $* ==="
-	$(SIM_BIN) $(BUILD_DIR)/test.elf | tee $(BUILD_DIR)/sim_output.log
+	$(SIM_BIN) $(BUILD_DIR)/test.elf | tee $(BUILD_DIR)/spike_output.log
 	@echo "=== FreeRTOS simulator test complete ==="
 
 # Pattern rule for comparing FreeRTOS RTL vs Spike traces
@@ -516,8 +514,12 @@ freertos-compare-%:
 	@$(MAKE) freertos-$*
 	@echo "=== Running and comparing FreeRTOS test: $* ==="
 	@$(MAKE) freertos-rtl-$* TRACE=1
-	@$(SPIKE) --isa=rv32ima -m0x80000000:0x200000 $(BUILD_DIR)/test.elf 2>&1 | tee $(BUILD_DIR)/spike_output.log
-	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_output.log
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+	else \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+	fi
+	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
 
 # Pattern rule for test shortcuts
 .PHONY: rtl-%
@@ -561,7 +563,7 @@ $(SIM_BIN): $(SIM_SRC)
 .PHONY: sim
 sim: build-sim sw
 	@echo "=== Running software simulator ==="
-	$(SIM_BIN) $(SW_ELF) $(BUILD_DIR)/sim_trace.txt | tee $(BUILD_DIR)/sim_output.log
+	$(SIM_BIN) $(SW_ELF) $(BUILD_DIR)/spike_trace.txt | tee $(BUILD_DIR)/spike_output.log
 	@echo "=== Software simulation complete ==="
 
 # Pattern rule: sim-<test_name>
@@ -578,7 +580,7 @@ compare: $(TRACE_CMP)
 	@$(MAKE) TRACE=1 rtl
 	@$(MAKE) TRACE=1 sim
 	@echo "=== Comparing traces ==="
-	@python3 $(TRACE_CMP) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
+	@python3 $(TRACE_CMP) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
 
 # Pattern rule: compare-<test_name>
 .PHONY: compare-%
@@ -625,7 +627,7 @@ verify: clean all sim rtl compare
 	@echo "Verification Complete (TEST=$(TEST))"
 	@echo "========================================"
 	@echo "RTL output: $(BUILD_DIR)/rtl_output.log"
-	@echo "SIM output: $(BUILD_DIR)/sim_output.log"
+	@echo "SIM output: $(BUILD_DIR)/spike_output.log"
 	@echo "Waveform:   $(BUILD_DIR)/dump.fst"
 	@echo "========================================"
 
@@ -678,7 +680,7 @@ wave:
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR)
-	rm -f rtl_trace.txt sim_trace.txt dump.fst dump.vcd
+	rm -f rtl_trace.txt spike_trace.txt dump.fst dump.vcd
 	@$(MAKE) -C $(FORMAL_DIR) clean 2>/dev/null || true
 
 .PHONY: clean-all
@@ -1033,8 +1035,8 @@ zephyr-info:
 	@echo "  make zephyr-clean-all       - Clean build and virtual environment"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make zephyr-rtl-hello_world TRACE=1 MAX_CYCLES=0"
-	@echo "  make zephyr-sim-hello_world"
+	@echo "  make zephyr-rtl-hello TRACE=1 MAX_CYCLES=0"
+	@echo "  make zephyr-sim-hello"
 	@echo "  make zephyr-compare-philosophers"
 	@echo ""
 	@echo "Available Zephyr Samples:"
@@ -1163,7 +1165,7 @@ zephyr-sim-%: build-sim
 	fi
 	@$(MAKE) zephyr-$*
 	@echo "=== Running Zephyr Sample in Simulator: $* ==="
-	$(SIM_BIN) $(BUILD_DIR)/test.elf | tee $(BUILD_DIR)/sim_output.log
+	$(SIM_BIN) $(BUILD_DIR)/test.elf | tee $(BUILD_DIR)/spike_output.log
 	@echo "=== Zephyr simulator test complete ==="
 
 # Pattern rule for comparing Zephyr RTL vs Spike traces
@@ -1180,8 +1182,12 @@ zephyr-compare-%:
 	@$(MAKE) zephyr-$*
 	@echo "=== Running and comparing Zephyr test: $* ==="
 	@$(MAKE) zephyr-rtl-$* TRACE=1
-	@$(SPIKE) --isa=rv32ima -m0x80000000:0x200000 $(BUILD_DIR)/test.elf 2>&1 | tee $(BUILD_DIR)/spike_output.log
-	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_output.log
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+	else \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+	fi
+	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
 
 # Pattern rule for Zephyr tests: zephyr-<sample> builds rtos/zephyr/samples/<sample>
 # Output to standard test.bin/test.elf files for consistency
@@ -1255,6 +1261,7 @@ NUTTX_BASE ?= $(HOME)/NuttX/nuttx
 NUTTX_APPS ?= $(HOME)/NuttX/apps
 NUTTX_BOARD = kcore-board
 NUTTX_CONFIG = nsh
+NUTTX_SAMPLES = $(NUTTX_DIR)/samples
 
 # Check if NuttX is installed
 check-nuttx:
@@ -1276,29 +1283,109 @@ check-nuttx:
 		exit 1; \
 	fi
 
-# Build NuttX with hello sample
-.PHONY: nuttx-hello
-nuttx-hello: check-nuttx
-	@echo "Building NuttX with hello sample..."
-	@mkdir -p $(NUTTX_BASE)/../build-hello
-	@# Copy board files to NuttX tree
+# Pattern rule for NuttX RTL simulation: nuttx-rtl-<sample>
+.PHONY: nuttx-rtl-%
+nuttx-rtl-%: build-verilator-only
+	@$(MAKE) nuttx-$*
+	@echo "=== Running NuttX sample in RTL simulation: $* ==="
+	@echo "nuttx-rtl-$*" > $(TEST_MARKER)
+	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_BIN) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
+	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
+		mv $(DUMP_FILE) $(BUILD_DIR)/; \
+		echo "Waveform saved to $(BUILD_DIR)/$(DUMP_FILE)"; \
+	fi
+	@echo "=== NuttX RTL simulation completed ==="
+
+# Pattern rule for NuttX C++ simulation: nuttx-sim-<sample>
+.PHONY: nuttx-sim-%
+nuttx-sim-%: build-sim
+	@$(MAKE) nuttx-$*
+	@echo "=== Running NuttX sample in C++ simulation: $* ==="
+	@echo "nuttx-sim-$*" > $(TEST_MARKER)
+	$(SIM_EXEC) $(SW_BIN) $(BUILD_DIR)/spike_trace.txt
+	@echo "=== NuttX C++ simulation completed ==="
+
+# Pattern rule for NuttX trace comparison: nuttx-compare-<sample>
+# Compares RTL execution with Spike ISA simulator to identify core bugs
+.PHONY: nuttx-compare-%
+nuttx-compare-%: build-verilator-only
+	@$(MAKE) nuttx-$*
+	@echo "=== Comparing NuttX test execution: RTL vs Spike ==="
+	@echo "Building and running RTL simulation with trace..."
+	@$(MAKE) nuttx-rtl-$* TRACE=1
+	@echo ""
+	@echo "Running Spike ISA simulator with the same binary..."
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF); \
+	else \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(SW_ELF); \
+	fi
+	@echo ""
+	@echo "=== Comparing traces: RTL vs Spike ==="
+	@if [ -f $(SIM_DIR)/trace_compare.py ]; then \
+		python3 $(SIM_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt; \
+	else \
+		echo "Note: trace_compare.py not found. Manual comparison:"; \
+		echo "RTL trace:   $(BUILD_DIR)/rtl_trace.txt"; \
+		echo "Spike trace: $(BUILD_DIR)/spike_trace.txt"; \
+	fi
+	@echo "=== NuttX comparison completed ==="
+
+# Pattern rule for NuttX tests: nuttx-<sample> builds rtos/nuttx/samples/<sample>
+# Output to standard test.bin/test.elf files for consistency
+.PHONY: nuttx-%
+nuttx-%: $(BUILD_DIR) check-nuttx
+	@echo "=== Building NuttX Sample: $* ==="
+	@if [ ! -d $(NUTTX_SAMPLES)/$* ]; then \
+		echo "Error: $(NUTTX_SAMPLES)/$* not found"; \
+		exit 1; \
+	fi
+	@echo "nuttx-$*" > $(TEST_MARKER)
+	@mkdir -p $(NUTTX_BASE)/../build-$*
+	@# Copy board files to NuttX tree (always update to pick up changes)
+	@echo "Syncing kcore board files..."
 	@mkdir -p $(NUTTX_BASE)/boards/risc-v/kcore
 	@cp -r $(NUTTX_DIR)/boards/risc-v/kcore/kcore-board $(NUTTX_BASE)/boards/risc-v/kcore/
-	@# Copy driver files
-	@mkdir -p $(NUTTX_BASE)/drivers/serial
-	@cp $(NUTTX_DIR)/drivers/serial/uart_kcore.c $(NUTTX_BASE)/drivers/serial/
-	@if [ ! -f $(NUTTX_BASE)/drivers/serial/Make.defs.orig ]; then \
-		cp $(NUTTX_BASE)/drivers/serial/Make.defs $(NUTTX_BASE)/drivers/serial/Make.defs.orig; \
+	@cp $(NUTTX_DIR)/boards/risc-v/kcore/Kconfig $(NUTTX_BASE)/boards/risc-v/kcore/Kconfig
+	@# Copy chip files to NuttX tree (always update to pick up changes)
+	@echo "Syncing kcore chip files..."
+	@mkdir -p $(NUTTX_BASE)/arch/risc-v/src/kcore
+	@mkdir -p $(NUTTX_BASE)/arch/risc-v/include/kcore
+	@cp -r $(NUTTX_DIR)/arch/risc-v/src/kcore/* $(NUTTX_BASE)/arch/risc-v/src/kcore/
+	@cp -r $(NUTTX_DIR)/arch/risc-v/include/kcore/* $(NUTTX_BASE)/arch/risc-v/include/kcore/
+	@# Patch arch Kconfig to add kcore (always update to pick up changes)
+	@echo "Patching arch Kconfig..."
+	@cd $(NUTTX_BASE) && git checkout arch/risc-v/Kconfig 2>/dev/null || true
+	@python3 $(NUTTX_DIR)/scripts/patch_kconfig.py $(NUTTX_BASE)/arch/risc-v/Kconfig
+	@# Copy driver files if they exist (always update to pick up changes)
+	@if [ -d $(NUTTX_DIR)/drivers ]; then \
+		echo "Syncing kcore drivers..."; \
+		if [ -f $(NUTTX_DIR)/drivers/serial/uart_kcore.c ]; then \
+			mkdir -p $(NUTTX_BASE)/drivers/serial; \
+			cp $(NUTTX_DIR)/drivers/serial/uart_kcore.c $(NUTTX_BASE)/drivers/serial/; \
+			if [ ! -f $(NUTTX_BASE)/drivers/serial/Make.defs.orig ]; then \
+				cp $(NUTTX_BASE)/drivers/serial/Make.defs $(NUTTX_BASE)/drivers/serial/Make.defs.orig; \
+			fi; \
+			cat $(NUTTX_BASE)/drivers/serial/Make.defs.orig $(NUTTX_DIR)/drivers/serial/Make.defs > $(NUTTX_BASE)/drivers/serial/Make.defs; \
+		fi; \
 	fi
-	@cat $(NUTTX_BASE)/drivers/serial/Make.defs.orig $(NUTTX_DIR)/drivers/serial/Make.defs > $(NUTTX_BASE)/drivers/serial/Make.defs
-	@# Copy hello sample to apps
-	@mkdir -p $(NUTTX_APPS)/examples/hello_kcore
-	@cp $(NUTTX_DIR)/samples/hello/* $(NUTTX_APPS)/examples/hello_kcore/
+	@# Copy sample to apps if it's a custom sample (skip standard NuttX samples like hello)
+	@echo "Checking for custom $* sample..."
+	@if [ "$*" != "hello" ] && [ -d $(NUTTX_SAMPLES)/$* ] && [ -f $(NUTTX_SAMPLES)/$*/Makefile ]; then \
+		echo "Syncing custom $* sample..."; \
+		SAMPLE_APP_NAME=$$(grep -h 'default "' $(NUTTX_SAMPLES)/$*/Kconfig 2>/dev/null | head -1 | sed 's/.*default "\([^"]*\)".*/\1/' || echo "$*"); \
+		mkdir -p $(NUTTX_APPS)/examples/$${SAMPLE_APP_NAME}; \
+		cp -r $(NUTTX_SAMPLES)/$*/* $(NUTTX_APPS)/examples/$${SAMPLE_APP_NAME}/; \
+	else \
+		echo "Using standard NuttX $* sample"; \
+	fi
 	@# Configure and build
 	@cd $(NUTTX_BASE) && \
-		export PATH=$(RISCV_PREFIX_DIR):$(PATH) && \
+		export PATH="$(RISCV_PREFIX_DIR):$$PATH" && \
 		export CROSS_COMPILE=$(RISCV_PREFIX) && \
-		make distclean && \
+		(make distclean 2>/dev/null || true) && \
+		rm -f .config .config.old && \
 		./tools/configure.sh kcore-board:nsh && \
 		make -j$(shell nproc)
 	@# Copy output files
@@ -1307,50 +1394,8 @@ nuttx-hello: check-nuttx
 	@$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
 	@$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
 	@$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
-	@echo "nuttx-hello" > $(TEST_MARKER)
-	@echo "=== NuttX hello sample built successfully ==="
+	@echo "=== NuttX sample built successfully ==="
 	@$(SIZE) $(BUILD_DIR)/test.elf
-
-# Build NuttX with NSH (NuttShell) sample
-.PHONY: nuttx-nsh
-nuttx-nsh: nuttx-hello
-	@echo "NuttX NSH already built with nuttx-hello target"
-
-# Run NuttX hello in RTL simulation
-.PHONY: nuttx-rtl-hello
-nuttx-rtl-hello: nuttx-hello rtl-verilator-build
-	@echo "=== Running NuttX hello in RTL simulation ==="
-	@echo "nuttx-rtl-hello" > $(TEST_MARKER)
-	@if [ "$(WAVE)" = "fst" ]; then \
-		$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/test.fst; \
-	elif [ "$(WAVE)" = "vcd" ]; then \
-		mkdir -p $(VLT_VCD_DIR); \
-		$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt $(VLT_VCD_DIR)/test.vcd; \
-	else \
-		$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt; \
-	fi
-	@echo "=== NuttX RTL simulation completed ==="
-
-# Run NuttX hello in C++ simulation
-.PHONY: nuttx-sim-hello
-nuttx-sim-hello: nuttx-hello $(SIM_EXEC)
-	@echo "=== Running NuttX hello in C++ simulation ==="
-	@echo "nuttx-sim-hello" > $(TEST_MARKER)
-	$(SIM_EXEC) $(SW_BIN) $(BUILD_DIR)/sim_trace.txt
-	@echo "=== NuttX C++ simulation completed ==="
-
-# Compare NuttX RTL and C++ simulation traces
-.PHONY: nuttx-compare-hello
-nuttx-compare-hello: nuttx-rtl-hello nuttx-sim-hello
-	@echo "=== Comparing NuttX hello traces ==="
-	python3 $(SIM_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
-	@echo "=== Trace comparison completed ==="
-
-# Aliases for NSH
-.PHONY: nuttx-rtl-nsh nuttx-sim-nsh nuttx-compare-nsh
-nuttx-rtl-nsh: nuttx-rtl-hello
-nuttx-sim-nsh: nuttx-sim-hello
-nuttx-compare-nsh: nuttx-compare-hello
 
 # Clean NuttX builds
 .PHONY: nuttx-clean
@@ -1363,18 +1408,29 @@ nuttx-clean:
 	@echo "NuttX builds cleaned"
 
 # Help for NuttX targets
-.PHONY: nuttx-help
-nuttx-help:
+nuttx: nuttx-info
+
+.PHONY: nuttx-info
+nuttx-info:
 	@echo "NuttX RTOS targets:"
-	@echo "  nuttx-hello          - Build NuttX with hello world sample"
-	@echo "  nuttx-nsh            - Build NuttX with NuttShell (NSH)"
-	@echo "  nuttx-rtl-hello      - Run hello in RTL simulation"
-	@echo "  nuttx-rtl-nsh        - Run NSH in RTL simulation"
-	@echo "  nuttx-sim-hello      - Run hello in C++ simulation"
-	@echo "  nuttx-sim-nsh        - Run NSH in C++ simulation"
-	@echo "  nuttx-compare-hello  - Compare hello RTL vs C++ traces"
-	@echo "  nuttx-compare-nsh    - Compare NSH RTL vs C++ traces"
-	@echo "  nuttx-clean          - Clean NuttX builds"
+	@echo "  nuttx-<sample>         - Build NuttX with specified sample from $(NUTTX_SAMPLES)"
+	@echo "  nuttx-rtl-<sample>     - Run sample in RTL simulation"
+	@echo "  nuttx-sim-<sample>     - Run sample in Spike ISS simulator"
+	@echo "  nuttx-compare-<sample> - Compare sample RTL vs Spike traces"
+	@echo "  nuttx-clean            - Clean NuttX builds"
+	@echo ""
+	@echo "Available NuttX samples:"
+	@if [ -d $(NUTTX_SAMPLES) ]; then \
+		for sample in $$(ls -1 $(NUTTX_SAMPLES) 2>/dev/null || true); do \
+			if [ -d $(NUTTX_SAMPLES)/$$sample ]; then \
+				echo "  - $$sample"; \
+			fi; \
+		done; \
+	fi
+	@echo ""
+	@echo "Examples:"
+	@echo "  make nuttx-hello           - Build hello world sample"
+	@echo "  make nuttx-rtl-hello       - Run hello in RTL simulation"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - NuttX must be installed at $(NUTTX_BASE)"

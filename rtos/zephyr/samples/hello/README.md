@@ -17,7 +17,7 @@ The application uses the fast magic address console driver by default for optima
 ### Using West
 
 ```bash
-cd rtos/zephyr/samples/hello_world
+cd rtos/zephyr/samples/hello
 west build -b kcore_board
 ```
 

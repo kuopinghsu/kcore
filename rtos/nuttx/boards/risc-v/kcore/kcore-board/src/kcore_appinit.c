@@ -25,6 +25,8 @@
 #include <nuttx/config.h>
 #include <nuttx/board.h>
 
+#include <errno.h>
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -58,5 +60,5 @@ int board_app_initialize(uintptr_t arg)
 {
   /* Perform board-specific initialization */
 
-  return OK;
+  return 0;  /* OK */
 }

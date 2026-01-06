@@ -27,7 +27,7 @@ rtos/zephyr/
 │   ├── console/            # Magic address console driver (fast)
 │   └── serial/             # UART driver (hardware accurate)
 └── samples/                # Sample applications
-    ├── hello_world/
+    ├── hello/
     ├── uart_echo/
     └── threads_sync/
 ```
@@ -141,10 +141,10 @@ Simple application that prints messages without timers or threading.
 
 ```bash
 # Using Make (recommended)
-make zephyr-hello_world
+make zephyr-hello
 
 # Using west directly
-cd rtos/zephyr/samples/hello_world
+cd rtos/zephyr/samples/hello
 west build -b kcore_board
 ```
 
@@ -179,8 +179,8 @@ west build -b kcore_board
 ### Quick Run with Make
 
 ```bash
-# Build and run hello_world in RTL simulation
-make zephyr-rtl-hello_world
+# Build and run hello in RTL simulation
+make zephyr-rtl-hello
 
 # Build and run uart_echo in RTL simulation
 make zephyr-rtl-uart_echo
@@ -198,7 +198,7 @@ make zephyr-rtl-threads_sync
 
 ### Expected Output Examples
 
-**hello_world:**
+**hello:**
 ```
 *** Booting Zephyr OS build v4.3.0 ***
 Hello World! kcore_board
@@ -503,7 +503,7 @@ This automatically creates the init entry with proper sub-priority handling.
 ### Memory Usage
 
 Typical memory usage per sample:
-- **hello_world**: ~8 KB (text: 7KB, data+bss: 1KB)
+- **hello**: ~8 KB (text: 7KB, data+bss: 1KB)
 - **uart_echo**: ~12 KB (text: 9KB, data+bss: 3KB)  
 - **threads_sync**: ~26 KB (text: 20KB, data+bss: 6KB)
 
@@ -547,7 +547,7 @@ CONFIG_IDLE_STACK_SIZE=256
 - **CPU**: RV32IM (no compressed, no atomics)
 - **Memory**: 2MB RAM
 - **Clock**: 50 MHz
-- **Samples**: hello_world, uart_echo, threads_sync
+- **Samples**: hello, uart_echo, threads_sync
 
 ## Contributing
 

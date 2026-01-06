@@ -417,7 +417,7 @@ Full Zephyr RTOS port for the kcore RV32IM processor with out-of-tree SoC and bo
 Using West (Zephyr's build tool):
 
 ```bash
-cd rtos/zephyr/samples/hello_world
+cd rtos/zephyr/samples/hello
 
 # Configure environment
 export ZEPHYR_BASE=~/zephyrproject/zephyr
@@ -458,7 +458,7 @@ CONFIG_SERIAL=y
 
 For complete setup, prerequisites, integration options, and customization details, see:
 - [rtos/zephyr/README.md](rtos/zephyr/README.md) - Complete Zephyr port documentation
-- [rtos/zephyr/samples/hello_world/README.md](rtos/zephyr/samples/hello_world/README.md) - Sample application guide
+- [rtos/zephyr/samples/hello/README.md](rtos/zephyr/samples/hello/README.md) - Sample application guide
 
 ## RISCOF Architectural Testing
 

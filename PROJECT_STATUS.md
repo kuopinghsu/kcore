@@ -48,7 +48,7 @@
   - ✅ Timer interrupts working
   - ✅ Multi-threading with preemption
   - ✅ Semaphores and mutexes
-  - ✅ Three working samples: hello_world, uart_echo, threads_sync
+  - ✅ Three working samples: hello, uart_echo, threads_sync
 - ✅ Formal verification (PC alignment, x0 register) - Basic properties verified with SymbiYosys
 - ✅ RVFI interface fully implemented (21 signals) for formal verification compatibility
 - ✅ Verilator compilation clean (zero warnings)

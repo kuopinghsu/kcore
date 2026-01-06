@@ -17,8 +17,16 @@ This directory contains Real-Time Operating System (RTOS) ports for the RV32IM k
 - **Location**: [`zephyr/`](zephyr/)
 - **Features**: Full SoC/board port with console, UART, timer drivers, and multi-threading
 - **Documentation**: See [zephyr/README.md](zephyr/README.md)
-- **Samples**: hello_world, uart_echo, threads_sync
-- **Make targets**: `make zephyr-hello_world`, `make zephyr-threads_sync`
+- **Samples**: hello, uart_echo, threads_sync
+- **Make targets**: `make zephyr-hello`, `make zephyr-threads_sync`
+
+### 3. NuttX RTOS (Apache NuttX) ✅
+- **Status**: Complete with POSIX-like API and minimal chip implementation
+- **Location**: [`nuttx/`](nuttx/)
+- **Features**: Full board and chip port with UART driver, CLINT timer, IRQ handling, and heap management
+- **Documentation**: See [nuttx/README.md](nuttx/README.md) and [nuttx/PORTING_GUIDE.md](nuttx/PORTING_GUIDE.md)
+- **Samples**: hello, nsh
+- **Make targets**: `make nuttx-hello`, `make nuttx-rtl-hello`
 
 ## Quick Start
 
@@ -37,30 +45,46 @@ make freertos-simple
 make zephyr-rtl-threads_sync
 
 # Build and run hello world
-make zephyr-rtl-hello_world
+make zephyr-rtl-hello
 
 # Build and run UART echo
 make zephyr-rtl-uart_echo
 ```
 
+### NuttX
+```bash
+# Build and run hello world
+make nuttx-rtl-hello
+
+# Build only
+make nuttx-hello
+
+# Run in C++ simulator
+make nuttx-sim-hello
+```
+
 ## Comparison
 
-| Feature | FreeRTOS | Zephyr |
-|---------|----------|--------|
-| **Kernel Version** | V11.2.0 | 4.3.99 |
-| **License** | MIT | Apache 2.0 |
-| **Footprint** | Small (~8KB) | Medium (~20KB+) |
-| **Threading** | ✅ Tasks | ✅ Threads |
-| **Timers** | ✅ Software timers | ✅ Hardware timer (CLINT) |
-| **Synchronization** | ✅ Semaphores, Mutexes, Queues | ✅ Semaphores, Mutexes |
-| **Memory Management** | ✅ heap_3 (malloc/free) | ✅ Minimal C library |
-| **Interrupts** | ✅ Timer interrupts | ✅ Timer interrupts |
-| **Preemption** | ✅ Configurable | ✅ Time-slicing |
-| **Priority Levels** | 8 | 256 |
-| **Stack Management** | Static allocation | Dynamic per-thread |
-| **Console Driver** | printf to magic address | Magic address + UART |
-| **Development Style** | Low-level control | Framework-based |
-| **Best For** | Simple embedded apps | Complex multi-threaded apps |
+| Feature | FreeRTOS | Zephyr | NuttX |
+|---------|----------|--------|-------|
+| **Kernel Version** | V11.2.0 | 4.3.99 | Apache NuttX |
+| **License** | MIT | Apache 2.0 | Apache 2.0 |
+| **Footprint** | Small (~8KB) | Medium (~20KB+) | Medium (~70KB) |
+| **Threading** | ✅ Tasks | ✅ Threads | ✅ Tasks/Processes |
+| **Timers** | ✅ Software timers | ✅ Hardware timer (CLINT) | ✅ Hardware timer (CLINT) |
+| **Synchronization** | ✅ Semaphores, Mutexes, Queues | ✅ Semaphores, Mutexes | ✅ POSIX primitives |
+| **Memory Management** | ✅ heap_3 (malloc/free) | ✅ Minimal C library | ✅ Full heap management |
+| **Interrupts** | ✅ Timer interrupts | ✅ Timer interrupts | ✅ Full IRQ handling |
+| **Preemption** | ✅ Configurable | ✅ Time-slicing | ✅ Priority-based |
+| **Priority Levels** | 8 | 256 | 256 |
+| **Stack Management** | Static allocation | Dynamic per-thread | Dynamic per-task |
+| **POSIX API** | ❌ No | ⚠️ Partial | ✅ Extensive |
+| **File Systems** | ❌ No | ✅ Yes | ✅ VFS + multiple FS |
+| **Shell** | ❌ No | ✅ Zephyr shell | ✅ NuttShell (NSH) |
+| **Console Driver** | printf to magic address | Magic address + UART | UART driver |
+| **Build System** | Make | West/CMake | Kconfig + Make |
+| **Development Style** | Low-level control | Framework-based | POSIX-like |
+| **Best For** | Simple embedded apps | Complex multi-threaded apps | POSIX-compatible apps |
 
 ## Hardware Support
 
@@ -80,15 +104,16 @@ Both RTOS ports support:
 | RTOS | Text (Code) | Data | BSS | Total |
 |------|-------------|------|-----|-------|
 | **FreeRTOS simple** | ~8 KB | ~500 B | ~66 KB | ~74 KB |
-| **Zephyr hello_world** | ~7 KB | ~100 B | ~1 KB | ~8 KB |
+| **Zephyr hello** | ~7 KB | ~100 B | ~1 KB | ~8 KB |
 | **Zephyr threads_sync** | ~20 KB | ~100 B | ~6 KB | ~26 KB |
+| **NuttX hello** | ~69 KB | ~700 B | ~6 KB | ~76 KB |
 
 ### Simulation Performance
 
 | Sample | Cycles | Instructions | CPI | Sim Time |
 |--------|--------|--------------|-----|----------|
 | **FreeRTOS simple** | 2.6M | 348K | 7.43 | 52ms |
-| **Zephyr hello_world** | 1K | 150 | 6.67 | <1ms |
+| **Zephyr hello** | 1K | 150 | 6.67 | <1ms |
 | **Zephyr threads_sync** | 79M | 10.6M | 7.45 | 790ms |
 
 ## Configuration
@@ -109,6 +134,7 @@ Both RTOS ports support:
 
 - **FreeRTOS**: See [freertos/README.md](freertos/README.md) for detailed porting guide
 - **Zephyr**: See [zephyr/README.md](zephyr/README.md) for comprehensive documentation
+- **NuttX**: See [nuttx/README.md](nuttx/README.md) for overview and [nuttx/PORTING_GUIDE.md](nuttx/PORTING_GUIDE.md) for complete porting guide
 - **Project Status**: See [../PROJECT_STATUS.md](../PROJECT_STATUS.md) for verification results
 
 ## Adding New RTOS

@@ -61,22 +61,29 @@ SECTIONS
     } > RAM
 
     .data : {
+        _sdata = .;
         *(.data*)
         *(.sdata*)
+        _edata = .;
     } > RAM :data
 
     .bss : {
+        _sbss = .;
         __bss_start = .;
         *(.bss*)
         *(.sbss*)
         *(COMMON)
         __bss_end = .;
+        _ebss = .;
         . = ALIGN(8);
         tohost = .;
         . += 8;
         fromhost = .;
         . += 8;
     } > RAM :data
+
+    /* Reference to flash copy of data section - for ROM-based systems */
+    _eronly = LOADADDR(.data) + SIZEOF(.data);
 
     /* Stack section - heap and stack share remaining memory */
     .stack : {
