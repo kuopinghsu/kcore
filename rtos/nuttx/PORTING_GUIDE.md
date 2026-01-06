@@ -241,8 +241,8 @@ nuttx-%: check-nuttx
 	
 	# Copy outputs
 	cp $(NUTTX_BASE)/nuttx build/test.elf
-	$(OBJCOPY) -O binary build/test.elf build/test.bin
 	$(OBJDUMP) -D build/test.elf > build/test.dump
+	# Note: ELF files are used directly, no binary conversion needed
 
 # Pattern rule for RTL simulation
 .PHONY: nuttx-rtl-%

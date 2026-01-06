@@ -42,15 +42,12 @@ make rtl-zephyr-hello WAVE=fst
 ### Manual Simulation
 
 ```bash
-# Convert ELF to binary
-riscv-none-elf-objcopy -O binary build/zephyr/zephyr.elf zephyr.bin
+# ELF file is used directly - no binary conversion needed
+# The simulator automatically loads and parses ELF files
 
-# Copy to build directory
-cp zephyr.bin ../../../build/test.bin
-
-# Run simulation
+# Run simulation (the Makefile handles copying zephyr.elf to build/test.elf)
 cd ../../..
-make rtl PROGRAM=test.bin
+make zephyr-rtl-hello
 ```
 
 ## Expected Output

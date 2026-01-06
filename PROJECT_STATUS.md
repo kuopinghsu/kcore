@@ -159,10 +159,17 @@ cat build/test.dump         # Disassembly
 - **tb_main.cpp**: Verilator C++ testbench
   - 2MB memory model
   - UART output monitoring
-  - Program loading from binary
+  - ELF program loading with symbol parsing (tohost/fromhost)
   - FST waveform generation
   - Performance statistics
   - Exit detection
+
+- **elfloader.c/h**: Custom ELF parser
+  - No external dependencies (libelf-free)
+  - Parses ELF32 format, loads program segments
+  - Extracts symbol table (tohost, fromhost addresses)
+  - Auto-detects file format (ELF or binary fallback)
+  - Zero-initializes BSS sections
 
 - **tb_soc.sv**: SystemVerilog wrapper
   - SoC instantiation
@@ -317,7 +324,7 @@ cat build/test.dump         # Disassembly
     - `make info` - Show all tool paths (includes Spike)
     - `make help` - Display all available targets
   - **Toolchain integration**: Reads paths from env.config
-  - **Output generation**: ELF, BIN, HEX, disassembly (.dump)
+  - **Output generation**: ELF, disassembly (.dump, .dis), map file (.map)
 
 - **env.config**: Centralized tool path configuration
   - RISC-V toolchain path: `RISCV_PREFIX=/opt/xpack-riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-`
@@ -328,6 +335,50 @@ cat build/test.dump         # Disassembly
   - Makefile reads and uses these paths automatically
   - Tools like Yosys/SymbiYosys accessed via PATH (either system PATH or PATH_APPEND)
   - Framework paths (riscv-formal, riscv-arch-test) use relative paths by default
+
+### ELF Loader Implementation (January 6, 2026)
+
+**Custom ELF Parser** - No external dependencies required:
+
+- **Implementation**: `testbench/elfloader.c` (277 lines) and `testbench/elfloader.h` (29 lines)
+  - Manual ELF32 structure definitions (no libelf dependency)
+  - Parses ELF header, program headers, and section headers
+  - Loads PT_LOAD segments with proper address mapping
+  - Zero-initializes BSS sections (memsz > filesz)
+  - Extracts symbol table (SHT_SYMTAB/SHT_DYNSYM sections)
+  - Auto-detects file format by checking ELF magic number (0x7f 'E' 'L' 'F')
+  - Fallback to binary loading for non-ELF files (backward compatible)
+
+- **Symbol Parsing**: Automatically finds and extracts special symbols
+  - `tohost` address (0x800001e0) - Program exit signal for RISC-V tests
+  - `fromhost` address (0x800001e8) - Host-to-target communication (HTIF protocol)
+  - Full symbol table accessible via `g_symbols` map for debugging
+
+- **Error Handling**: Comprehensive error reporting with helpful messages
+  - File not found: "ERROR: Cannot open program file: <filename>\n       Please check that the file exists and is readable."
+  - Truncated file: "ERROR: Failed to read ELF header from <filename>\n       File may be truncated or corrupted."
+  - Invalid format: "ERROR: Invalid ELF magic number in <filename>\n       File format is not recognized as ELF."
+  - All failures return exit code 1 for proper error detection
+
+- **Build System Integration**: Streamlined workflow eliminates intermediate files
+  - Software builds directly to `.elf` format (no `.bin` or `.hex` generation)
+  - RISCOF tests pass ELF files directly to simulator and DUT
+  - All RTOS builds (FreeRTOS, Zephyr, NuttX) use ELF files
+  - Faster builds (one less conversion step per test)
+  - Simpler build system (removed all `objcopy` commands)
+
+- **Memory Interface**: Uses existing DPI-C functions for byte-level access
+  - `mem_write_byte(addr, data)` - Write byte to memory
+  - `mem_read_byte(addr)` - Read byte from memory
+  - Base address: 0x80000000 (CPU address space)
+
+**Key Benefits**:
+1. No external library dependencies (libelf not required)
+2. Symbol access for debugging (tohost/fromhost monitoring)
+3. Faster builds (no binary conversion step)
+4. Unified workflow across all test types
+5. Clear error messages with actionable hints
+6. Backward compatible (binary files still supported)
 
 ---
 
@@ -393,7 +444,7 @@ make compare-<test>        # Compare traces for specific test
 
 The build system automatically:
 - Compiles software with RISC-V toolchain
-- Generates ELF, BIN, HEX, disassembly
+- Generates ELF, disassembly, and map files
 - Builds Verilator simulation
 - Runs both RTL and Spike
 - Compares execution traces
@@ -511,7 +562,7 @@ rtos/freertos/
 #### Build System
 **New Makefile Targets**:
 ```bash
-make freertos-<test>              # Build FreeRTOS test (outputs test.bin/test.elf)
+make freertos-<test>              # Build FreeRTOS test (outputs test.elf)
 make freertos-rtl-<test>          # Run test on RTL simulation
 make freertos-sim-<test>          # Run test on Spike simulator (not supported)
 make freertos-compare-<test>      # Compare RTL vs Spike traces (not supported)
@@ -531,7 +582,7 @@ make freertos-rtl-simple TRACE=1  # Run with trace (1.1MB output)
 - **Compiler Flags**: `-O2 -g -march=rv32ima -mabi=ilp32 -mcmodel=medany`
 - **Linker Script**: `rtos/freertos/sys/freertos_link.ld`
 - **Include Paths**: `rtos/freertos/include`, `rtos/freertos/portable/RISC-V`, `rtos/freertos/sys`
-- **Output Files**: `build/test.bin`, `build/test.elf`, `build/test.hex`, `build/test.dump`, `build/test.map`
+- **Output Files**: `build/test.elf`, `build/test.dump`, `build/test.map`
 
 #### Example Tests
 **Simple Test** (`rtos/freertos/samples/simple.c`):
@@ -566,12 +617,12 @@ make freertos-rtl-simple TRACE=1  # Run with trace (1.1MB output)
 4. **Renamed Tests**: `simple_test` → `simple` (consistent with project naming)
 5. **Extended Memory**: Increased RAM from 128KB to 2MB in linker script
 6. **Fixed Makefile**: Changed pattern from `rtl-freertos-%` to `freertos-rtl-%` to avoid conflicts
-7. **Standardized Naming**: All FreeRTOS builds output to `test.bin`, `test.elf`, `test.map` (not `freertos_*.bin`)
+7. **Standardized Naming**: All FreeRTOS builds output to `test.elf`, `test.map` (not `freertos_*.bin`)
 8. **Removed Static Allocation**: Set `configSUPPORT_STATIC_ALLOCATION=0`, removed static TCBs
 
 #### Performance Characteristics
 **Simple Test** (2 tasks, 10 iterations each):
-- **Build Size**: 73KB `test.bin`, 211KB `test.elf`
+- **Build Size**: 211KB `test.elf`
 - **Disassembly**: 3.3MB `test.dump`
 - **Trace Size**: 1.1MB `build/rtl_trace.txt` (with TRACE=1)
 - **Execution**: Successfully runs to completion ✅

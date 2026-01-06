@@ -46,6 +46,7 @@ A complete RISC-V RV32IMA processor implementation with 5-stage pipeline, suppor
       - [Build RTL Simulation](#build-rtl-simulation)
       - [Run RTL Simulation](#run-rtl-simulation)
       - [Run Software Simulator \& Compare Traces](#run-software-simulator--compare-traces)
+    - [ELF Program Loading](#elf-program-loading)
     - [Viewing Waveforms](#viewing-waveforms)
   - [Test Programs](#test-programs)
     - [Simple Test (`sw/simple/`)](#simple-test-swsimple)
@@ -260,8 +261,7 @@ make TEST=full sw    # Build comprehensive test (explicit)
 ```
 
 Produces:
-- `build/test.elf` / `build/test.bin` - Compiled test program
-- `build/test.hex` - Intel HEX format
+- `build/test.elf` - Compiled test program
 - `build/test.dump` - Disassembly listing
 
 #### Build RTL Simulation
@@ -303,6 +303,27 @@ make compare              # Auto-runs both simulators and compares
 make compare-mytest       # Custom test (shortcut)
 make TEST=mytest compare  # Custom test (explicit)
 ```
+
+### ELF Program Loading
+
+The testbench includes a custom ELF loader with no external dependencies:
+
+**Features**:
+- Parses ELF32 format directly (no libelf required)
+- Loads program segments with proper memory mapping
+- Extracts symbol table (tohost, fromhost addresses)
+- Auto-detects file format (ELF or binary fallback)
+- Comprehensive error reporting with helpful hints
+
+**Build Output** (software compilation):
+- `build/test.elf` - Executable (loaded directly by simulator)
+- `build/test.dump` - Disassembly with addresses
+- `build/test.dis` - Disassembly with source
+- `build/test.map` - Link map with symbols
+
+**No intermediate files**: The build system no longer generates `.bin` or `.hex` files. All simulations load ELF files directly for faster builds and symbol access.
+
+See [testbench/elfloader.h](testbench/elfloader.h) and [PROJECT_STATUS.md](PROJECT_STATUS.md) for implementation details.
 
 ### Viewing Waveforms
 
@@ -488,7 +509,11 @@ For detailed RISCOF setup and usage, see [verif/riscof_targets/README.md](verif/
 riscv/
 ├── docs/              # Documentation, diagrams, and technical notes
 ├── rtl/               # SystemVerilog RTL sources (CPU core, CSR, CLINT, UART, SoC)
-├── testbench/         # Verilator testbench (SystemVerilog + C++)
+├── testbench/         # Verilator testbench (C++ with ELF loader, SystemVerilog wrapper)
+│   ├── tb_main.cpp    # Main testbench with ELF program loading
+│   ├── elfloader.c/h  # Custom ELF parser (no external dependencies)
+│   ├── tb_soc.sv      # SystemVerilog wrapper
+│   └── axi_memory.sv  # AXI memory model
 ├── rtos/              # Real-Time Operating Systems
 │   ├── freertos/      # FreeRTOS V11.2.0 integration
 │   │   ├── include/   # API headers and configuration

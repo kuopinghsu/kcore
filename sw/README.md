@@ -482,15 +482,13 @@ The build system automatically:
 - Includes all `.c` files in the test directory
 - Links with `common/start.S`
 - Uses `common/link.ld` for memory layout
-- Generates `.elf`, `.bin`, `.hex`, `.dump`, and `.dis` files
+- Generates `.elf`, `.dump`, `.dis`, and `.map` files
 
 ## Build Artifacts
 
 When you build a test, the following files are generated in `build/`:
 
 - `test.elf` - ELF executable with debug symbols
-- `test.bin` - Raw binary for simulation
-- `test.hex` - Intel HEX format
 - `test.dump` - Full disassembly listing
 - `test.dis` - Disassembly with source code interleaved
 

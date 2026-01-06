@@ -5,8 +5,8 @@ This directory contains the RISCOF configuration for running RISC-V architectura
 ## Overview
 
 RISCOF (RISC-V COmpliance Framework) is used to verify that the kcore implementation complies with the RISC-V ISA specification. It runs the official RISC-V architectural test suite and compares the results between:
-- **DUT (Device Under Test)**: kcore - our RV32IMA processor with Verilator
-- **Reference Model**: Spike - the official RISC-V ISA simulator
+- **DUT (Device Under Test)**: kcore - our RV32IMA processor with Verilator (loads ELF files directly)
+- **Reference Model**: Spike - the official RISC-V ISA simulator (loads ELF files directly)
 
 ## Directory Structure
 

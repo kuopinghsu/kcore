@@ -79,14 +79,16 @@ struct Elf32_Sym {
 bool load_elf(Vtb_soc* dut, const std::string& filename) {
     FILE* f = fopen(filename.c_str(), "rb");
     if (!f) {
-        fprintf(stderr, "Cannot open ELF file: %s\n", filename.c_str());
+        fprintf(stderr, "ERROR: Cannot open ELF file: %s\n", filename.c_str());
+        fprintf(stderr, "       Please check that the file exists and is readable.\n");
         return false;
     }
 
     // Read ELF header
     Elf32_Ehdr ehdr;
     if (fread(&ehdr, sizeof(ehdr), 1, f) != 1) {
-        fprintf(stderr, "Failed to read ELF header\n");
+        fprintf(stderr, "ERROR: Failed to read ELF header from %s\n", filename.c_str());
+        fprintf(stderr, "       File may be truncated or corrupted.\n");
         fclose(f);
         return false;
     }
@@ -94,7 +96,8 @@ bool load_elf(Vtb_soc* dut, const std::string& filename) {
     // Check ELF magic number
     if (ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
         ehdr.e_ident[2] != 'L' || ehdr.e_ident[3] != 'F') {
-        fprintf(stderr, "Not a valid ELF file\n");
+        fprintf(stderr, "ERROR: Not a valid ELF file: %s\n", filename.c_str());
+        fprintf(stderr, "       File format is not recognized as ELF.\n");
         fclose(f);
         return false;
     }
@@ -110,7 +113,7 @@ bool load_elf(Vtb_soc* dut, const std::string& filename) {
     for (int i = 0; i < ehdr.e_phnum; i++) {
         // Seek to program header
         fseek(f, ehdr.e_phoff + i * ehdr.e_phentsize, SEEK_SET);
-        
+
         Elf32_Phdr phdr;
         if (fread(&phdr, sizeof(phdr), 1, f) != 1) {
             fprintf(stderr, "Failed to read program header %d\n", i);
@@ -155,7 +158,7 @@ bool load_elf(Vtb_soc* dut, const std::string& filename) {
     for (int i = 0; i < ehdr.e_shnum; i++) {
         // Seek to section header
         fseek(f, ehdr.e_shoff + i * ehdr.e_shentsize, SEEK_SET);
-        
+
         Elf32_Shdr shdr;
         if (fread(&shdr, sizeof(shdr), 1, f) != 1) {
             continue;
@@ -197,7 +200,7 @@ bool load_elf(Vtb_soc* dut, const std::string& filename) {
             }
 
             const char* name = &strtab[sym.st_name];
-            
+
             // Store symbol
             Symbol symbol;
             symbol.name = name;
@@ -228,7 +231,8 @@ bool load_elf(Vtb_soc* dut, const std::string& filename) {
 bool load_bin(Vtb_soc* dut, const std::string& filename) {
     FILE* f = fopen(filename.c_str(), "rb");
     if (!f) {
-        fprintf(stderr, "Cannot open file: %s\n", filename.c_str());
+        fprintf(stderr, "ERROR: Cannot open binary file: %s\n", filename.c_str());
+        fprintf(stderr, "       Please check that the file exists and is readable.\n");
         return false;
     }
 
@@ -256,7 +260,8 @@ bool load_program(Vtb_soc* dut, const std::string& filename) {
     // Check if file exists and read magic number
     FILE* f = fopen(filename.c_str(), "rb");
     if (!f) {
-        fprintf(stderr, "Cannot open file: %s\n", filename.c_str());
+        fprintf(stderr, "ERROR: Cannot open program file: %s\n", filename.c_str());
+        fprintf(stderr, "       Please check that the file exists and is readable.\n");
         return false;
     }
 

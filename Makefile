@@ -15,7 +15,6 @@ endif
 
 # Toolchain commands
 CC = $(RISCV_PREFIX)gcc
-OBJCOPY = $(RISCV_PREFIX)objcopy
 OBJDUMP = $(RISCV_PREFIX)objdump
 SIZE = $(RISCV_PREFIX)size
 
@@ -73,10 +72,7 @@ endif
 
 # Build artifacts
 SW_ELF = $(BUILD_DIR)/test.elf
-SW_BIN = $(BUILD_DIR)/test.bin
-SW_HEX = $(BUILD_DIR)/test.hex
 SW_DUMP = $(BUILD_DIR)/test.dump
-SW_DIS = $(BUILD_DIR)/test.dis
 
 # Marker file to track which TEST was last built
 TEST_MARKER = $(BUILD_DIR)/.test_marker
@@ -310,7 +306,7 @@ $(BUILD_DIR):
 # ============================================================================
 
 .PHONY: sw
-sw: $(BUILD_DIR) $(SW_BIN) $(SW_HEX) $(SW_DUMP) $(SW_DIS)
+sw: $(BUILD_DIR) $(SW_ELF) $(SW_DUMP)
 	@echo "=== Software built successfully (TEST=$(TEST)) ==="
 	@$(SIZE) $(SW_ELF)
 
@@ -318,7 +314,7 @@ sw: $(BUILD_DIR) $(SW_BIN) $(SW_HEX) $(SW_DUMP) $(SW_DIS)
 $(TEST_MARKER): $(BUILD_DIR)
 	@if [ ! -f $(TEST_MARKER) ] || [ "$$(cat $(TEST_MARKER) 2>/dev/null)" != "$(TEST)" ]; then \
 		echo "TEST changed to $(TEST), forcing software rebuild..."; \
-		rm -f $(SW_ELF) $(SW_BIN) $(SW_HEX) $(SW_DUMP) $(SW_DIS); \
+		rm -f $(SW_ELF) $(SW_DUMP); \
 		echo "$(TEST)" > $(TEST_MARKER); \
 	fi
 
@@ -326,17 +322,8 @@ $(SW_ELF): $(TEST_MARKER) $(SW_SOURCES) $(SW_COMMON_DIR)/link.ld
 	@echo "Building software for TEST=$(TEST)..."
 	$(CC) $(CFLAGS) $(LDFLAGS) $(SW_SOURCES) -o $@
 
-$(SW_BIN): $(SW_ELF)
-	$(OBJCOPY) -O binary $< $@
-
-$(SW_HEX): $(SW_ELF)
-	$(OBJCOPY) -O ihex $< $@
-
 $(SW_DUMP): $(SW_ELF)
 	$(OBJDUMP) -D $< > $@
-
-$(SW_DIS): $(SW_ELF)
-	$(OBJDUMP) -D -S $< > $@
 
 # Pattern rule for software shortcuts
 .PHONY: sw-%
@@ -383,7 +370,7 @@ build-verilator: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES) sw
 	fi
 	$(VERILATOR) $(VLT_FLAGS) \
 		--Mdir $(VLT_BUILD_DIR) \
-		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp
+		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.c
 	@echo "=== RTL simulation binary built ==="
 
 # Build Verilator without building software (for FreeRTOS builds)
@@ -404,13 +391,13 @@ build-verilator-only: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
 	fi
 	$(VERILATOR) $(VLT_FLAGS) \
 		--Mdir $(VLT_BUILD_DIR) \
-		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp
+		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.c
 	@echo "=== RTL simulation binary built ==="
 
 .PHONY: rtl
 rtl: build-verilator
 	@echo "=== Running RTL simulation ==="
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_BIN) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@echo "=== RTL simulation complete ==="
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
@@ -419,7 +406,7 @@ rtl: build-verilator
 	fi
 	@if [ "$(TRACE)" = "1" ] && [ -f $(BUILD_DIR)/rtl_trace.txt ]; then \
 		echo "=== Parsing call trace ==="; \
-		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/test.elf $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
+		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
 		echo "Call trace report: $(BUILD_DIR)/call_trace_report.txt"; \
 	fi
 ifeq ($(MEMTRACE),1)
@@ -473,7 +460,7 @@ freertos-rtl-%: build-verilator-only
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test: $* ==="
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(BUILD_DIR)/test.bin $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -481,7 +468,7 @@ freertos-rtl-%: build-verilator-only
 	fi
 	@if [ "$(TRACE)" = "1" ] && [ -f $(BUILD_DIR)/rtl_trace.txt ]; then \
 		echo "=== Parsing call trace ==="; \
-		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/test.elf $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
+		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
 		echo "Call trace report: $(BUILD_DIR)/call_trace_report.txt"; \
 	fi
 	@echo "=== FreeRTOS test complete ==="
@@ -498,7 +485,7 @@ freertos-sim-%: build-sim
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test in Simulator: $* ==="
-	$(SIM_BIN) $(BUILD_DIR)/test.elf | tee $(BUILD_DIR)/spike_output.log
+	$(SIM_BIN) $(SW_ELF) | tee $(BUILD_DIR)/spike_output.log
 	@echo "=== FreeRTOS simulator test complete ==="
 
 # Pattern rule for comparing FreeRTOS RTL vs Spike traces
@@ -515,9 +502,9 @@ freertos-compare-%:
 	@echo "=== Running and comparing FreeRTOS test: $* ==="
 	@$(MAKE) freertos-rtl-$* TRACE=1
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF); \
 	else \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(SW_ELF); \
 	fi
 	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
 
@@ -1085,7 +1072,7 @@ FREERTOS_LDFLAGS += -Wl,-Map=$(BUILD_DIR)/test.map
 FREERTOS_LDFLAGS += -lc -lgcc
 
 # Pattern rule for FreeRTOS tests: freertos-<test> builds rtos/freertos/samples/<test>.c
-# Output to standard test.bin/test.elf files for consistency
+# Output to standard test.elf files for consistency
 .PHONY: freertos-%
 freertos-%: $(BUILD_DIR)
 	@echo "=== Building FreeRTOS Test: $* ==="
@@ -1099,12 +1086,10 @@ freertos-%: $(BUILD_DIR)
 		$(FREERTOS_SYS)/freertos_syscall.c \
 		$(FREERTOS_SAMPLES)/$*.c \
 		$(FREERTOS_SOURCES) \
-		-o $(BUILD_DIR)/test.elf
-	$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
-	$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
-	$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
+		-o $(SW_ELF)
+	$(OBJDUMP) -D $(SW_ELF) > $(SW_DUMP)
 	@echo "=== FreeRTOS test built successfully ==="
-	@$(SIZE) $(BUILD_DIR)/test.elf
+	@$(SIZE) $(SW_ELF)
 
 # ========================================================================
 # Zephyr RTOS Targets
@@ -1139,7 +1124,7 @@ zephyr-rtl-%: build-verilator-only
 	fi
 	@$(MAKE) zephyr-$*
 	@echo "=== Running Zephyr Sample: $* ==="
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(BUILD_DIR)/test.bin $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1147,7 +1132,7 @@ zephyr-rtl-%: build-verilator-only
 	fi
 	@if [ "$(TRACE)" = "1" ] && [ -f $(BUILD_DIR)/rtl_trace.txt ]; then \
 		echo "=== Parsing call trace ==="; \
-		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/test.elf $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
+		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
 		echo "Call trace report: $(BUILD_DIR)/call_trace_report.txt"; \
 	fi
 	@echo "=== Zephyr test complete ==="
@@ -1165,7 +1150,7 @@ zephyr-sim-%: build-sim
 	fi
 	@$(MAKE) zephyr-$*
 	@echo "=== Running Zephyr Sample in Simulator: $* ==="
-	$(SIM_BIN) $(BUILD_DIR)/test.elf | tee $(BUILD_DIR)/spike_output.log
+	$(SIM_BIN) $(SW_ELF) | tee $(BUILD_DIR)/spike_output.log
 	@echo "=== Zephyr simulator test complete ==="
 
 # Pattern rule for comparing Zephyr RTL vs Spike traces
@@ -1183,14 +1168,14 @@ zephyr-compare-%:
 	@echo "=== Running and comparing Zephyr test: $* ==="
 	@$(MAKE) zephyr-rtl-$* TRACE=1
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF); \
 	else \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(BUILD_DIR)/test.elf; \
+		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(SW_ELF); \
 	fi
 	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
 
 # Pattern rule for Zephyr tests: zephyr-<sample> builds rtos/zephyr/samples/<sample>
-# Output to standard test.bin/test.elf files for consistency
+# Output to standard test.elf files for consistency
 .PHONY: zephyr-%
 zephyr-%: $(BUILD_DIR) zephyr-venv-setup
 	@echo "=== Building Zephyr Sample: $* ==="
@@ -1228,13 +1213,11 @@ zephyr-%: $(BUILD_DIR) zephyr-venv-setup
 			-DZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) \
 			-DKCONFIG_ERROR_ON_WARNINGS=OFF
 
-	@echo "Converting to binary format..."
-	@cp $(ZEPHYR_DIR)/build.$*/zephyr/zephyr.elf $(BUILD_DIR)/test.elf
-	$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
-	$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
-	$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
+	@echo "Copying ELF file..."
+	@cp $(ZEPHYR_DIR)/build.$*/zephyr/zephyr.elf $(SW_ELF)
+	$(OBJDUMP) -D $(SW_ELF) > $(SW_DUMP)
 	@echo "=== Zephyr sample built successfully ==="
-	@$(SIZE) $(BUILD_DIR)/test.elf
+	@$(SIZE) $(SW_ELF)
 
 # Clean Zephyr build directories
 .PHONY: zephyr-clean
@@ -1333,7 +1316,7 @@ nuttx-compare-%: build-verilator-only
 	@echo "=== NuttX comparison completed ==="
 
 # Pattern rule for NuttX tests: nuttx-<sample> builds rtos/nuttx/samples/<sample>
-# Output to standard test.bin/test.elf files for consistency
+# Output to standard test.elf files for consistency
 .PHONY: nuttx-%
 nuttx-%: $(BUILD_DIR) check-nuttx
 	@echo "=== Building NuttX Sample: $* ==="
@@ -1390,12 +1373,10 @@ nuttx-%: $(BUILD_DIR) check-nuttx
 		make -j$(shell nproc)
 	@# Copy output files
 	@mkdir -p $(BUILD_DIR)
-	@cp $(NUTTX_BASE)/nuttx $(BUILD_DIR)/test.elf
-	@$(OBJCOPY) -O binary $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.bin
-	@$(OBJCOPY) -O ihex $(BUILD_DIR)/test.elf $(BUILD_DIR)/test.hex
-	@$(OBJDUMP) -D $(BUILD_DIR)/test.elf > $(BUILD_DIR)/test.dump
+	@cp $(NUTTX_BASE)/nuttx $(SW_ELF)
+	@$(OBJDUMP) -D $(SW_ELF) > $(SW_DUMP)
 	@echo "=== NuttX sample built successfully ==="
-	@$(SIZE) $(BUILD_DIR)/test.elf
+	@$(SIZE) $(SW_ELF)
 
 # Clean NuttX builds
 .PHONY: nuttx-clean

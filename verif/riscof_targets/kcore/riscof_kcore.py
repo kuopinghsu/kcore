@@ -95,9 +95,6 @@ class kcore(pluginTemplate):
          -I '+self.pluginpath+'/env/\
          -I ' + archtest_env + ' {2} -o {3} {4}'
 
-       # Objcopy command
-       self.objcopy_cmd = self.riscv_prefix + 'objcopy -O binary {0} {1}'
-
     def build(self, isa_yaml, platform_yaml):
       ispec = utils.load_yaml(isa_yaml)['hart0']
       self.xlen = ('64' if 64 in ispec['supported_xlen'] else '32')
@@ -134,7 +131,6 @@ class kcore(pluginTemplate):
           test = testentry['test_path']
           test_dir = testentry['work_dir']
           elf = os.path.join(test_dir, testname + '.elf')
-          bin_file = os.path.join(test_dir, testname + '.bin')
           sig_file = os.path.join(test_dir, self.name[:-1] + ".signature")
 
           compile_macros = ' -D' + " -D".join(testentry['macros'])
@@ -142,26 +138,23 @@ class kcore(pluginTemplate):
           # Compile command
           cmd = self.compile_cmd.format(testentry['isa'].lower(), self.xlen, test, elf, compile_macros)
 
-          # Convert to binary
-          objcopy = self.objcopy_cmd.format(elf, bin_file)
-
           if self.target_run:
             # Extract signature addresses from ELF using nm
             nm_cmd = self.riscv_prefix + 'nm {0} | grep -E "begin_signature|end_signature" > {1}.symbols; '.format(elf, elf)
 
-            # Run on Verilator with signature extraction using addresses from ELF
+            # Run on Verilator with signature extraction using ELF file directly
             # The signature extraction script will read the .symbols file and pass addresses to simulator
             # Pass RISCOF_DEBUG environment variable if set
             debug_prefix = ''
             if os.environ.get('RISCOF_DEBUG', '0') == '1':
                 debug_prefix = 'export RISCOF_DEBUG=1; '
 
-            simcmd = nm_cmd + debug_prefix + 'python3 {0}/extract_signature.py {1} {2} {3}'.format(
-                self.pluginpath, elf, bin_file, sig_file)
+            simcmd = nm_cmd + debug_prefix + 'python3 {0}/extract_signature.py {1} {2}'.format(
+                self.pluginpath, elf, sig_file)
           else:
             simcmd = 'echo "NO RUN"'
 
-          execute = '@cd {0}; {1}; {2}; {3};'.format(test_dir, cmd, objcopy, simcmd)
+          execute = '@cd {0}; {1}; {2};'.format(test_dir, cmd, simcmd)
           make.add_target(execute)
 
       make.execute_all(self.work_dir)

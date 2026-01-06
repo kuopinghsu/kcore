@@ -21,7 +21,7 @@ def print_debug(msg):
     if DEBUG_MODE:
         print(f"[DEBUG] {msg}")
 
-def extract_signature(elf_file, bin_file, sig_file):
+def extract_signature(elf_file, sig_file):
     """Run simulation and extract signature"""
     try:
         # Read signature addresses from .symbols file or extract directly from ELF
@@ -105,7 +105,7 @@ def extract_signature(elf_file, bin_file, sig_file):
         # Run simulation with signature extraction
         cmd = [
             dut_exe,
-            f'+PROGRAM={bin_file}',
+            f'+PROGRAM={elf_file}',
             f'+MAX_CYCLES=100000',
             f'+SIGNATURE={sig_file}',
             f'+SIG_BEGIN={sig_begin:x}',
@@ -166,10 +166,10 @@ def extract_signature(elf_file, bin_file, sig_file):
         return 1
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: extract_signature.py <elf_file> <bin_file> <output_signature_file>")
+    if len(sys.argv) != 3:
+        print("Usage: extract_signature.py <elf_file> <output_signature_file>")
         print("Debug mode can be enabled with: export RISCOF_DEBUG=1")
         sys.exit(1)
 
 
-    sys.exit(extract_signature(sys.argv[1], sys.argv[2], sys.argv[3]))
+    sys.exit(extract_signature(sys.argv[1], sys.argv[2]))

@@ -4,6 +4,7 @@
 #include <verilated.h>
 #include "Vtb_soc.h"
 #include "svdpi.h"
+#include "elfloader.h"
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -13,6 +14,7 @@
 #include <cstdio>
 #include <vector>
 #include <queue>
+#include <cstring>
 
 #define HAVE_CHRONO
 
@@ -143,34 +145,6 @@ uint8_t uart_transmit() {
     }
 
     return 1;  // Default idle
-}
-
-// Load program into DUT's internal memory using DPI-C
-bool load_program(Vtb_soc* dut, const std::string& filename) {
-    FILE* f = fopen(filename.c_str(), "rb");
-    if (!f) {
-        std::cerr << "Cannot open file: " << filename << std::endl;
-        return false;
-    }
-
-    // Set the scope for DPI calls to the memory module
-    svSetScope(svGetScopeFromName("TOP.tb_soc.u_memory"));
-
-    // Read file and write to memory via DPI-C
-    // Memory array starts at index 0, which maps to CPU address 0x80000000
-    int addr = 0;
-    int byte_val;
-    size_t bytes_read = 0;
-
-    while ((byte_val = fgetc(f)) != EOF) {
-        mem_write_byte(addr, (char)byte_val);
-        addr++;
-        bytes_read++;
-    }
-
-    fclose(f);
-    std::cout << "Loaded " << bytes_read << " bytes from " << filename << std::endl;
-    return true;
 }
 
 // Read environment configuration from env.config

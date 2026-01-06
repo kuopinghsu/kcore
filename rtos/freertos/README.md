@@ -154,8 +154,7 @@ riscv-none-elf-gcc -march=rv32im -mabi=ilp32 \
     -nostartfiles \
     *.o -o app.elf
 
-# Convert to binary
-riscv-none-elf-objcopy -O binary app.elf app.bin
+# ELF file is used directly by the simulator (no binary conversion needed)
 ```
 
 ## Sample Applications

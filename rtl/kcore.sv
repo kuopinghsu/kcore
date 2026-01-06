@@ -352,7 +352,7 @@ module kcore #(
             pc_next = mtvec;
         end else if (take_branch) begin
             pc_next = branch_target;  // Use current branch_target for all taken branches
-        end else if (if_id_reg.valid && !stall_ex && !flush_ex && 
+        end else if (if_id_reg.valid && !stall_ex && !flush_ex &&
                      // Don't increment PC if an unconditional jump is in ID stage (will be resolved in next cycle)
                      !(decoded_opcode == OP_JAL || decoded_opcode == OP_JALR)) begin
             // Increment PC when instruction advances from ID to EX stage
@@ -726,10 +726,10 @@ module kcore #(
     // synthesis translate_off
     // Debug: DPI-C export function to dump registers (can be called from testbench)
     export "DPI-C" task dump_registers;
-    
+
     task dump_registers(input int unsigned dump_pc);
         $display("=== Register Dump at PC=0x%08h ===", dump_pc);
-        $display("zero: 0x%08h  ra: 0x%08h  sp: 0x%08h  gp: 0x%08h", 
+        $display("zero: 0x%08h  ra: 0x%08h  sp: 0x%08h  gp: 0x%08h",
                  regfile[0], regfile[1], regfile[2], regfile[3]);
         $display("tp: 0x%08h  t0: 0x%08h  t1: 0x%08h  t2: 0x%08h",
                  regfile[4], regfile[5], regfile[6], regfile[7]);
@@ -766,7 +766,7 @@ module kcore #(
 
     logic take_branch;
     logic prev_flush_ex;  // Track previous cycle's flush
-    
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             prev_flush_ex <= 1'b0;
@@ -774,7 +774,7 @@ module kcore #(
             prev_flush_ex <= flush_ex;
         end
     end
-    
+
     // Don't take branch if we just flushed in the previous cycle (avoid acting on stale instruction)
     assign take_branch = id_ex_reg.valid && !prev_flush_ex && !instr_misaligned_exception && (
                         (id_ex_reg.opcode == OP_JAL) ||
@@ -1379,7 +1379,7 @@ module kcore #(
             always_comb begin
                 // Get branch_target from ex_mem_reg which was calculated in ID/EX stage
                 branch_target_from_ex_mem = ex_mem_reg.branch_target;
-                
+
                 case (mem_wb_reg.opcode)
                     OP_JAL, OP_JALR: next_pc = {branch_target_from_ex_mem[31:2], 2'b00};  // Jump target (force align)
                     OP_BRANCH: begin
