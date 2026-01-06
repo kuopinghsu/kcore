@@ -351,13 +351,7 @@ module kcore #(
         end else if (interrupt_taken) begin
             pc_next = mtvec;
         end else if (take_branch) begin
-            // For JAL/JALR in current EX stage, use the branch_target calculated combinationally
-            // For branches from EX/MEM pipeline, use ex_mem_reg.branch_target
-            if ((id_ex_reg.opcode == OP_JAL) || (id_ex_reg.opcode == OP_JALR)) begin
-                pc_next = branch_target;  // Use combinationally calculated target for JAL/JALR
-            end else begin
-                pc_next = ex_mem_reg.branch_target;  // Use registered target for branches
-            end
+            pc_next = branch_target;  // Use current branch_target for all taken branches
         end else if (if_id_reg.valid && !stall_ex && !flush_ex) begin
             // Increment PC when instruction advances from ID to EX stage
             // This ensures PC only increments once per instruction consumed by the pipeline
@@ -433,7 +427,7 @@ module kcore #(
                 decoded_imm = {decoded_instr[31:12], 12'd0};
             end
             OP_JAL: begin
-                decoded_imm = {{12{decoded_instr[31]}}, decoded_instr[31], decoded_instr[19:12], decoded_instr[20], decoded_instr[30:21], 1'b0};
+                decoded_imm = {{11{decoded_instr[31]}}, decoded_instr[31], decoded_instr[19:12], decoded_instr[20], decoded_instr[30:21], 1'b0};
             end
             default: decoded_imm = 32'd0;
         endcase
