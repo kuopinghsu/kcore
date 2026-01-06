@@ -352,7 +352,9 @@ module kcore #(
             pc_next = mtvec;
         end else if (take_branch) begin
             pc_next = branch_target;  // Use current branch_target for all taken branches
-        end else if (if_id_reg.valid && !stall_ex && !flush_ex) begin
+        end else if (if_id_reg.valid && !stall_ex && !flush_ex && 
+                     // Don't increment PC if an unconditional jump is in ID stage (will be resolved in next cycle)
+                     !(decoded_opcode == OP_JAL || decoded_opcode == OP_JALR)) begin
             // Increment PC when instruction advances from ID to EX stage
             // This ensures PC only increments once per instruction consumed by the pipeline
             pc_next = pc + 32'd4;
@@ -721,6 +723,33 @@ module kcore #(
         branch_target = {target_addr[31:1], 1'b0};  // Force 2-byte alignment (mask bit [0])
     end
 
+    // synthesis translate_off
+    // Debug: DPI-C export function to dump registers (can be called from testbench)
+    export "DPI-C" task dump_registers;
+    
+    task dump_registers(input int unsigned dump_pc);
+        $display("=== Register Dump at PC=0x%08h ===", dump_pc);
+        $display("zero: 0x%08h  ra: 0x%08h  sp: 0x%08h  gp: 0x%08h", 
+                 regfile[0], regfile[1], regfile[2], regfile[3]);
+        $display("tp: 0x%08h  t0: 0x%08h  t1: 0x%08h  t2: 0x%08h",
+                 regfile[4], regfile[5], regfile[6], regfile[7]);
+        $display("s0: 0x%08h  s1: 0x%08h  a0: 0x%08h  a1: 0x%08h",
+                 regfile[8], regfile[9], regfile[10], regfile[11]);
+        $display("a2: 0x%08h  a3: 0x%08h  a4: 0x%08h  a5: 0x%08h",
+                 regfile[12], regfile[13], regfile[14], regfile[15]);
+        $display("a6: 0x%08h  a7: 0x%08h  s2: 0x%08h  s3: 0x%08h",
+                 regfile[16], regfile[17], regfile[18], regfile[19]);
+        $display("s4: 0x%08h  s5: 0x%08h  s6: 0x%08h  s7: 0x%08h",
+                 regfile[20], regfile[21], regfile[22], regfile[23]);
+        $display("s8: 0x%08h  s9: 0x%08h  s10: 0x%08h  s11: 0x%08h",
+                 regfile[24], regfile[25], regfile[26], regfile[27]);
+        $display("t3: 0x%08h  t4: 0x%08h  t5: 0x%08h  t6: 0x%08h",
+                 regfile[28], regfile[29], regfile[30], regfile[31]);
+        $display("PC: 0x%08h", dump_pc);
+        $display("======================================");
+    endtask
+    // synthesis translate_on
+
     // Detect instruction misalignment exception for 4-byte alignment requirement
     // Only check bit [1] as bit [0] is allowed for compressed instructions (RV32C)
     // Since we don't support compressed, we require 4-byte alignment (bits [1:0] == 00)
@@ -736,7 +765,18 @@ module kcore #(
     end
 
     logic take_branch;
-    assign take_branch = id_ex_reg.valid && !instr_misaligned_exception && (
+    logic prev_flush_ex;  // Track previous cycle's flush
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            prev_flush_ex <= 1'b0;
+        end else begin
+            prev_flush_ex <= flush_ex;
+        end
+    end
+    
+    // Don't take branch if we just flushed in the previous cycle (avoid acting on stale instruction)
+    assign take_branch = id_ex_reg.valid && !prev_flush_ex && !instr_misaligned_exception && (
                         (id_ex_reg.opcode == OP_JAL) ||
                         (id_ex_reg.opcode == OP_JALR) ||
                         (id_ex_reg.opcode == OP_BRANCH && alu_branch_taken)
