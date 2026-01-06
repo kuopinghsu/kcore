@@ -1,0 +1,34 @@
+--- a/arch/risc-v/Kconfig
++++ b/arch/risc-v/Kconfig
+@@ -54,6 +54,15 @@ config ARCH_CHIP_BL602
+        ---help---
+                BouffaloLab BL602(rv32imfc)
+ 
++config ARCH_CHIP_KCORE
++       bool "KCORE"
++       select ARCH_RV32
++       select ARCH_RV_ISA_M
++       select ARCH_RV_ISA_A
++       ---help---
++               KCORE custom RISC-V processor
++
+ config ARCH_CHIP_ESP32C3_LEGACY
+        bool "Espressif ESP32-C3 (Legacy)"
+        select ARCH_RV32
+@@ -554,6 +563,7 @@ config ARCH_CHIP
+        default "k230"                  if ARCH_CHIP_K230
+        default "sg2000"                if ARCH_CHIP_SG2000
+        default "eic7700x"              if ARCH_CHIP_EIC7700X
++       default "kcore"                 if ARCH_CHIP_KCORE
+        default "rp23xx-rv"             if ARCH_CHIP_RP23XX_RV
+ 
+ config ARCH_RISCV_INTXCPT_EXTENSIONS
+@@ -868,6 +878,9 @@ endif
+ if ARCH_CHIP_RP23XX_RV
+ source "arch/risc-v/src/rp23xx-rv/Kconfig"
+ endif
++if ARCH_CHIP_KCORE
++source "arch/risc-v/src/kcore/Kconfig"
++endif
+ 
+ endif # ARCH_RISCV

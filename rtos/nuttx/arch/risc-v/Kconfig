@@ -1,0 +1,20 @@
+# Patch file to add KCORE to existing Kconfig - insert after ARCH_CHIP_BL602
+#
+# To apply: Insert this config block into the "RISC-V chip selection" choice
+# after the ARCH_CHIP_BL602 entry in arch/risc-v/Kconfig
+
+config ARCH_CHIP_KCORE
+	bool "KCORE"
+	select ARCH_RV32
+	select ARCH_RV_ISA_M
+	select ARCH_RV_ISA_A
+	---help---
+		KCORE custom RISC-V processor
+
+# Also add this to the ARCH_CHIP string section:
+#       default "kcore" if ARCH_CHIP_KCORE
+
+# And add this near the end before endif # ARCH_RISCV:
+# if ARCH_CHIP_KCORE
+# source "arch/risc-v/src/kcore/Kconfig"
+# endif

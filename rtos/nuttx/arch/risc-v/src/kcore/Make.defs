@@ -1,0 +1,20 @@
+############################################################################
+# arch/risc-v/src/kcore/Make.defs
+#
+# Copyright (c) 2026 kcore Project
+# SPDX-License-Identifier: Apache-2.0
+#
+############################################################################
+
+# Include common RISC-V make definitions first
+include common/Make.defs
+
+# Specify our HEAD assembly file
+HEAD_ASRC = kcore_head.S
+
+# Specify chip sources - minimal implementation using common code
+CHIP_CSRCS  = kcore_start.c
+CHIP_CSRCS += kcore_irq.c kcore_irq_dispatch.c
+CHIP_CSRCS += kcore_timerisr.c
+CHIP_CSRCS += kcore_allocateheap.c
+CHIP_CSRCS += kcore_lowputc.c

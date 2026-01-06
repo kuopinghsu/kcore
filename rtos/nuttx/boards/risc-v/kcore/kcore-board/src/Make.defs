@@ -1,0 +1,16 @@
+############################################################################
+# boards/risc-v/kcore/kcore-board/src/Make.defs
+#
+# Copyright (c) 2026 kcore Project
+# SPDX-License-Identifier: Apache-2.0
+#
+############################################################################
+
+CSRCS  = kcore_boot.c
+
+ifeq ($(CONFIG_BOARDCTL),y)
+  CSRCS += kcore_appinit.c
+endif
+
+DEPPATH += --dep-path board
+VPATH += :board
