@@ -511,7 +511,7 @@ riscv/
 ├── rtl/               # SystemVerilog RTL sources (CPU core, CSR, CLINT, UART, SoC)
 ├── testbench/         # Verilator testbench (C++ with ELF loader, SystemVerilog wrapper)
 │   ├── tb_main.cpp    # Main testbench with ELF program loading
-│   ├── elfloader.c/h  # Custom ELF parser (no external dependencies)
+│   ├── elfloader.cpp/h  # Custom ELF parser (no external dependencies)
 │   ├── tb_soc.sv      # SystemVerilog wrapper
 │   └── axi_memory.sv  # AXI memory model
 ├── rtos/              # Real-Time Operating Systems

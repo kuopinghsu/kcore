@@ -88,9 +88,9 @@ def extract_signature(elf_file, sig_file):
         
         # Use FST binary in debug mode, standard binary otherwise
         if DEBUG_MODE:
-            dut_exe = os.path.join(project_root, 'build/verilator_fst/Vtb_soc')
+            dut_exe = os.path.join(project_root, 'build/verilator_fst/kcore_vsim')
         else:
-            dut_exe = os.path.join(project_root, 'build/verilator/Vtb_soc')
+            dut_exe = os.path.join(project_root, 'build/verilator/kcore_vsim')
         
         test_dir = os.path.dirname(sig_file)
         test_name = os.path.basename(test_dir)

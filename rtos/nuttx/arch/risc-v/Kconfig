@@ -7,7 +7,8 @@ config ARCH_CHIP_KCORE
 	bool "KCORE"
 	select ARCH_RV32
 	select ARCH_RV_ISA_M
-	select ARCH_RV_ISA_A
+	# Atomic instructions not fully tested yet
+	# select ARCH_RV_ISA_A
 	---help---
 		KCORE custom RISC-V processor
 

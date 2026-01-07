@@ -100,14 +100,27 @@ def compare_traces(rtl_traces, spike_traces):
         elif len(rtl_traces) < effective_spike_len:
             print(f"\n[PASS] All {len(rtl_traces)} RTL instructions match Spike")
             print(f"  (Spike continued for {effective_spike_len - len(rtl_traces)} more instructions)")
+            print(f"  RTL trace ends at line {len(rtl_traces)}")
+            print(f"  Last RTL instruction: PC=0x{rtl_traces[-1]['pc']:08x} INSTR=0x{rtl_traces[-1]['instr']:08x}")
             return 0
         else:
             print(f"\n[FAIL] Length mismatch: RTL={len(rtl_traces)} Spike={effective_spike_len}")
+            print(f"  All Spike instructions matched, but RTL trace has {len(rtl_traces) - effective_spike_len} extra entries")
+            print(f"  Spike trace ends at line {effective_spike_len + spike_offset} (after alignment)")
+            print(f"  RTL continues from line {effective_spike_len + 1} to {len(rtl_traces)}")
+            if effective_spike_len > 0:
+                print(f"  Last matching instruction: PC=0x{spike_traces[effective_spike_len + spike_offset - 1]['pc']:08x}")
+            if effective_spike_len < len(rtl_traces):
+                print(f"  First unmatched RTL instruction (line {effective_spike_len + 1}): PC=0x{rtl_traces[effective_spike_len]['pc']:08x} INSTR=0x{rtl_traces[effective_spike_len]['instr']:08x}")
             return 1
     else:
         print(f"\n[FAIL] Found {mismatches} mismatches")
         if len(rtl_traces) != effective_spike_len:
             print(f"  Length mismatch: RTL={len(rtl_traces)} Spike={effective_spike_len}")
+            if len(rtl_traces) > effective_spike_len:
+                print(f"  RTL has {len(rtl_traces) - effective_spike_len} extra entries after line {effective_spike_len}")
+            else:
+                print(f"  Spike has {effective_spike_len - len(rtl_traces)} extra entries after line {len(rtl_traces)}")
         return 1
 
 def main():

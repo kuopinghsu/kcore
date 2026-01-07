@@ -248,7 +248,7 @@ nuttx-%: check-nuttx
 .PHONY: nuttx-rtl-%
 nuttx-rtl-%: nuttx-% rtl-verilator-build
 	@echo "=== Running NuttX sample in RTL: $* ==="
-	$(VLT_DIR)/Vtb_soc $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt
+	$(VLT_BUILD_DIR)/kcore_vsim $(SW_BIN) 100000 $(BUILD_DIR)/rtl_trace.txt
 
 # Pattern rule for C++ simulation
 .PHONY: nuttx-sim-%

@@ -70,21 +70,45 @@ def parse_rtl_trace(trace_file, symbols):
     call_trace = []
     pc_history = []
     
+    # Detect trace format by reading first non-empty line
+    trace_format = 'rtl'  # default
+    with open(trace_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                if line.startswith('core'):
+                    trace_format = 'spike'
+                    print(f"Detected Spike trace format")
+                else:
+                    print(f"Detected RTL trace format")
+                break
+    
     with open(trace_file, 'r') as f:
         for line_num, line in enumerate(f, 1):
-            # Format: "cycle_num 0xPC (0xINSTR) ..."
-            # Example: "7 0x80000000 (0x00000297) x5  0x80000000                                ; auipc t0,0x0"
             parts = line.strip().split()
             if len(parts) < 2:
                 continue
             
-            # Second column should be PC (0xHHHHHHHH format)
-            if not parts[1].startswith('0x'):
-                continue
+            # Parse based on format
+            # RTL format: "cycle_num 0xPC (0xINSTR) ..."
+            # Spike format: "core   0: privilege 0xPC (0xINSTR) ..."
+            pc = None
+            if trace_format == 'spike':
+                # Spike format: PC is at index 3 (after "core 0: privilege")
+                if len(parts) >= 4 and parts[0] == 'core':
+                    try:
+                        pc = int(parts[3], 16)
+                    except (ValueError, IndexError):
+                        continue
+            else:
+                # RTL format: PC is at index 1
+                if parts[1].startswith('0x'):
+                    try:
+                        pc = int(parts[1], 16)
+                    except ValueError:
+                        continue
             
-            try:
-                pc = int(parts[1], 16)
-            except ValueError:
+            if pc is None:
                 continue
             
             pc_history.append(pc)
@@ -154,28 +178,79 @@ def parse_rtl_trace_tree(trace_file, symbols, elf_file, toolchain_prefix):
     # Track which functions we've already added to tree to avoid duplicates
     seen_calls = set()
     
+    # Detect trace format by reading first non-empty line
+    trace_format = 'rtl'  # default
+    with open(trace_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                if line.startswith('core'):
+                    trace_format = 'spike'
+                    print(f"Detected Spike trace format")
+                else:
+                    print(f"Detected RTL trace format")
+                break
+    
     with open(trace_file, 'r') as f:
         for line_num, line in enumerate(f, 1):
             parts = line.strip().split()
             if len(parts) < 2:
                 continue
             
-            if not parts[1].startswith('0x'):
+            # Parse based on format
+            # RTL format: "cycle_num 0xPC (0xINSTR) ..."
+            # Spike format: "core   0: privilege 0xPC (0xINSTR) ..."
+            pc = None
+            if trace_format == 'spike':
+                # Spike format: PC is at index 3 (after "core 0: privilege")
+                if len(parts) >= 4 and parts[0] == 'core':
+                    try:
+                        pc = int(parts[3], 16)
+                    except (ValueError, IndexError):
+                        continue
+            else:
+                # RTL format: PC is at index 1
+                if parts[1].startswith('0x'):
+                    try:
+                        pc = int(parts[1], 16)
+                    except ValueError:
+                        continue
+            
+            if pc is None:
                 continue
             
-            try:
-                pc = int(parts[1], 16)
-            except ValueError:
-                continue
+            # Extract instruction opcode
+            instr = None
+            instr_idx = 4 if trace_format == 'spike' else 2
+            if len(parts) > instr_idx and parts[instr_idx].startswith('(0x') and parts[instr_idx].endswith(')'):
+                try:
+                    instr = int(parts[instr_idx][3:-1], 16)
+                except ValueError:
+                    pass
             
-            # Check instruction type from disassembly comment
+            # Check instruction type from disassembly comment (RTL) or decode instruction (Spike)
             line_lower = line.lower()
             
             # Detect function calls (jal/jalr that saves return address)
-            # Format: "x1  0x..." means x1 (ra) is written
             is_call = False
-            if '; jal ' in line_lower and ' x1 ' in line_lower:
+            rd = None  # destination register
+            
+            # Try to get rd from trace (RTL format has "x1  0x..." for register writes)
+            if ' x1 ' in line or ' x1  ' in line:
+                rd = 1
+            
+            # Check from comments (RTL traces)
+            if '; jal ' in line_lower and rd == 1:
                 is_call = True
+            elif '; jalr' in line_lower and rd == 1:
+                is_call = True
+            # Decode instruction (for Spike traces without comments)
+            elif instr is not None:
+                opcode = instr & 0x7F
+                rd = (instr >> 7) & 0x1F
+                # JAL opcode = 0x6F, JALR opcode = 0x67
+                if (opcode == 0x6F or opcode == 0x67) and rd == 1:
+                    is_call = True
             
             # Detect returns (ret or jalr with specific patterns)
             is_return = False
@@ -183,9 +258,44 @@ def parse_rtl_trace_tree(trace_file, symbols, elf_file, toolchain_prefix):
                 is_return = True
             elif '; jalr' in line_lower and 'x0' in line_lower:
                 is_return = True
+            # Decode instruction for returns (jalr x0, offset(x1))
+            elif instr is not None:
+                opcode = instr & 0x7F
+                rd = (instr >> 7) & 0x1F
+                rs1 = (instr >> 15) & 0x1F
+                # JALR x0, offset(x1) - typical return pattern
+                if opcode == 0x67 and rd == 0 and rs1 == 1:
+                    is_return = True
             
             # Find function name for this PC
             func_name = addr_to_symbol(pc, symbols)
+            
+            # Check if we have a pending call to resolve
+            if call_stack and call_stack[-1].get('pending'):
+                pending_call = call_stack[-1]
+                if func_name:
+                    target_func = func_name.split('+')[0]
+                    pending_call['name'] = target_func
+                    pending_call['pending'] = False
+                    
+                    # Get stack size
+                    if target_func not in stack_size_cache:
+                        stack_size_cache[target_func] = get_stack_frame_size(elf_file, toolchain_prefix, target_func)
+                    pending_call['stack_size'] = stack_size_cache[target_func]
+                    
+                    # Add to tree output
+                    call_key = (len(call_stack) - 1, target_func, pending_call['line'] // 100)
+                    if call_key not in seen_calls:
+                        seen_calls.add(call_key)
+                        indent = "  " * (len(call_stack) - 1)
+                        stack_info = f" [frame: {pending_call['stack_size']} bytes]" if pending_call['stack_size'] else ""
+                        tree_output.append({
+                            'line': pending_call['line'],
+                            'pc': pending_call['entry_pc'],
+                            'indent': indent,
+                            'text': f"{target_func}{stack_info}",
+                            'depth': len(call_stack) - 1
+                        })
             
             if func_name:
                 base_func = func_name.split('+')[0]
@@ -193,10 +303,26 @@ def parse_rtl_trace_tree(trace_file, symbols, elf_file, toolchain_prefix):
                 # On function call, push to stack
                 if is_call:
                     # Find the target function being called
-                    # Look for target address in the line
+                    # Method 1: Look for target address in disassembly comment (RTL traces)
                     target_match = re.search(r'<([^>]+)>', line)
+                    target_func = None
+                    
                     if target_match:
                         target_func = target_match.group(1)
+                    
+                    # Method 2: For Spike traces without comments, we'll detect the call
+                    # and the next instruction's function will be the target
+                    # Store this as a pending call that will be resolved on next iteration
+                    if not target_func and trace_format == 'spike':
+                        # Mark that we just made a call, target will be determined by next PC
+                        call_stack.append({
+                            'name': None,  # Will be filled on next iteration
+                            'entry_pc': pc,
+                            'line': line_num,
+                            'stack_size': None,
+                            'pending': True
+                        })
+                    elif target_func:
                         
                         # Get stack size if not cached
                         if target_func not in stack_size_cache:
@@ -314,7 +440,7 @@ def generate_call_trace_report(output_file, call_trace, func_call_count, pc_hist
             if invalid_pcs:
                 f.write(f"\n  WARNING: Found {len(invalid_pcs)} PCs outside RAM range!\n")
                 f.write(f"  Invalid PC examples: ")
-                f.write(", ".join([f"0x{pc:08x}" for pc in set(invalid_pcs)[:10]]))
+                f.write(", ".join([f"0x{pc:08x}" for pc in list(set(invalid_pcs))[:10]]))
                 f.write("\n")
 
 def main():

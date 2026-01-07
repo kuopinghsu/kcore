@@ -24,8 +24,7 @@ ENTRY(__start)
 
 MEMORY
 {
-  kflash (rx) : ORIGIN = 0x80000000, LENGTH = 2M
-  ksram (rwx) : ORIGIN = 0x80000000, LENGTH = 2M
+  ram (rwx) : ORIGIN = 0x80000000, LENGTH = 2M
 }
 
 SECTIONS
@@ -41,14 +40,14 @@ SECTIONS
     *(.rodata.*)
     *(.gnu.linkonce.r.*)
     _etext = .;
-  } > kflash
+  } > ram
 
   .init_section :
   {
     _sinit = ABSOLUTE(.);
     KEEP(*(.init_array .init_array.*))
     _einit = ABSOLUTE(.);
-  } > kflash
+  } > ram
 
   .data :
   {
@@ -59,7 +58,7 @@ SECTIONS
     CONSTRUCTORS
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
-  } > ksram AT > kflash
+  } > ram
 
   _eronly = LOADADDR(.data);
 
@@ -70,18 +69,15 @@ SECTIONS
     _sbss = ABSOLUTE(.);
     *(.bss)
     *(.bss.*)
+    *(.sbss)
+    *(.sbss.*)
     *(.gnu.linkonce.b.*)
+    *(.gnu.linkonce.sb.*)
     *(COMMON)
     . = ALIGN(4);
     _ebss = ABSOLUTE(.);
-    
-    /* Spike/ISA simulator communication */
-    . = ALIGN(8);
-    tohost = .;
-    . += 8;
-    fromhost = .;
-    . += 8;
-  } > ksram
+    _end = ABSOLUTE(.);
+  } > ram
 
   /* Stabs debugging sections */
 

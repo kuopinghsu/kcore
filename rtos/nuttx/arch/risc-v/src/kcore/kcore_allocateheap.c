@@ -15,10 +15,12 @@
 
 void up_allocate_heap(void **heap_start, size_t *heap_size)
 {
-  /* Use the entire RAM after BSS as heap */
+  extern uint8_t _end[];   /* End of BSS and HTIF section */
+  
+  /* Use the entire RAM after BSS and HTIF as heap */
 
-  *heap_start = (void *)&_ebss;
-  *heap_size  = (size_t)CONFIG_RAM_SIZE - ((size_t)&_ebss - CONFIG_RAM_START);
+  *heap_start = (void *)_end;
+  *heap_size  = (size_t)CONFIG_RAM_SIZE - ((size_t)_end - CONFIG_RAM_START);
 }
 
 #ifdef CONFIG_MM_KERNEL_HEAP

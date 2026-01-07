@@ -88,11 +88,6 @@ synth: check $(SYNTH_DONE)
 
 $(SYNTH_DONE): $(RTL_SOURCES) $(CONFIG) $(SYNTH_SCRIPT) | $(RESULTS_DIR) $(REPORTS_DIR)
 	@echo "========================================"
-	@echo "Checking PDK Libraries"
-	@echo "========================================"
-	@./check_pdk.sh
-	@echo ""
-	@echo "========================================"
 	@echo "Running Synthesis"
 	@echo "========================================"
 	@echo "Design: $(DESIGN)"
@@ -100,6 +95,7 @@ $(SYNTH_DONE): $(RTL_SOURCES) $(CONFIG) $(SYNTH_SCRIPT) | $(RESULTS_DIR) $(REPOR
 	@for file in $(RTL_SOURCES); do echo "  - $$file"; done
 	@echo "Target: ASAP7 7nm @ 120 MHz"
 	@echo ""
+	@mkdir -p $(REPORTS_DIR)
 	$(YOSYS) -c $(SYNTH_SCRIPT)
 	@echo ""
 	@echo "========================================"
@@ -133,7 +129,7 @@ $(SYNTH_DONE): $(RTL_SOURCES) $(CONFIG) $(SYNTH_SCRIPT) | $(RESULTS_DIR) $(REPOR
 	@echo "========================================"
 
 # View reports
-reports: synth
+syn-reports: synth
 	@echo "========================================"
 	@echo "Synthesis Reports"
 	@echo "========================================"

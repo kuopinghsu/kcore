@@ -126,7 +126,6 @@ cat build/test.dump         # Disassembly
 ## 📦 Project Components
 
 ### RTL Implementation (rtl/)
-### RTL Implementation (rtl/)
 
 - **kcore.sv**: 5-stage pipelined RV32IMA processor
   - Instruction Fetch (IF), Decode (ID), Execute (EX), Memory (MEM), Write Back (WB)
@@ -164,7 +163,7 @@ cat build/test.dump         # Disassembly
   - Performance statistics
   - Exit detection
 
-- **elfloader.c/h**: Custom ELF parser
+- **elfloader.cpp/h**: Custom ELF parser
   - No external dependencies (libelf-free)
   - Parses ELF32 format, loads program segments
   - Extracts symbol table (tohost, fromhost addresses)
@@ -340,7 +339,7 @@ cat build/test.dump         # Disassembly
 
 **Custom ELF Parser** - No external dependencies required:
 
-- **Implementation**: `testbench/elfloader.c` (277 lines) and `testbench/elfloader.h` (29 lines)
+- **Implementation**: `testbench/elfloader.cpp` (277 lines) and `testbench/elfloader.h` (29 lines)
   - Manual ELF32 structure definitions (no libelf dependency)
   - Parses ELF header, program headers, and section headers
   - Loads PT_LOAD segments with proper address mapping

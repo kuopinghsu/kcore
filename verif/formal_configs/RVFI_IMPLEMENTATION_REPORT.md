@@ -273,7 +273,7 @@ SBY 18:40:45 [formal_basic_bmc] DONE (PASS, rc=0)
 
 **Warnings**: Missing RVFI port connections in soc_top.sv (expected, since soc_top doesn't use RVFI)
 
-**Binary Generated**: build/verilator/Vtb_soc
+**Binary Generated**: build/verilator/kcore_vsim
 
 ### RTL Simulation Regression Test
 

@@ -150,7 +150,7 @@
        ▼
 ┌──────────────────────────────────────┐
 │ 3. Run Verilator Simulation          │
-│    Vtb_soc test.elf ...              │
+│    kcore_vsim test.elf ...           │
 │    - Load binary to memory           │
 │    - Execute instructions            │
 │    - Capture UART output             │

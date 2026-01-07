@@ -199,7 +199,7 @@ module tb_soc #(
 
     // Register write data (what gets written to regfile)
     // This mirrors the WB stage logic in kcore.sv
-    assign wb_rd_data = (wb_opcode == 7'b0000011) ?  // OP_LOAD
+    assign wb_rd_data = (wb_opcode == 7'b0000011 || wb_opcode == 7'b0101111) ?  // OP_LOAD or OP_AMO
                          u_soc.u_cpu.mem_wb_reg.mem_data :
                          u_soc.u_cpu.mem_wb_reg.alu_result;
     assign wb_rd_write = u_soc.u_cpu.mem_wb_valid_reg && (wb_rd != 5'd0);

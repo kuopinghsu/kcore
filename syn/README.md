@@ -40,46 +40,11 @@ make check    # Verify tools are accessible
 
 ### 2. ASAP7 PDK Liberty Files
 
-The ASAP7 PDK Liberty files may be compressed (`.7z` format). A helper script is provided to check and extract them:
+The ASAP7 PDK Liberty files are included in the `syn/pdk/` directory:
+- `asap7sc7p5t_SIMPLE_RVT_TT_nldm_201020.lib` - Combinational cells
+- `asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib` - Sequential cells (flip-flops, latches)
 
-```bash
-# Check PDK library availability and extract if needed
-./check_pdk.sh
-```
-
-This script will:
-- Check if required Liberty files exist (SIMPLE and SEQ libraries)
-- Automatically extract `.7z` compressed files if needed
-- Verify all required libraries are available
-
-**Note**: The script is automatically run before synthesis, but you can run it manually to pre-extract files.
-
-**Install p7zip if needed**:
-```bash
-# Ubuntu/Debian
-sudo apt-get install p7zip-full
-
-# RHEL/CentOS
-sudo yum install p7zip p7zip-plugins
-
-# macOS
-brew install p7zip
-```
-
-### 3. ASAP7 PDK (Optional - for advanced use)
-
-For additional PDK resources, the ASAP7 PDK can be obtained:
-
-```bash
-# Clone ASAP7 PDK
-git clone https://github.com/The-OpenROAD-Project/asap7.git
-cd asap7
-
-# Set environment variable
-export ASAP7_HOME=$(pwd)
-```
-
-**Note**: The synthesis flow works without ASAP7 PDK using generic cell mapping. ASAP7 is a predictive 7nm PDK for academic research only, not for production tapeout. For production designs, use Sky130 or other foundry PDKs.
+**Note**: ASAP7 is a predictive 7nm PDK for academic research only, not for production tapeout. For production designs, use Sky130 or other foundry PDKs.
 
 ## Quick Start
 
@@ -97,10 +62,10 @@ This will:
 ### View Results
 
 ```bash
-make reports    # View all reports
-make stats      # Quick statistics
-make area       # Area breakdown
-make cells      # Cell usage
+make syn-reports  # View all reports
+make stats        # Quick statistics
+make area         # Area breakdown
+make cells        # Cell usage
 ```
 
 ### Formal Equivalence Check

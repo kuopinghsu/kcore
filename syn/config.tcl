@@ -90,8 +90,8 @@ set GENERATE_LOGS 1
 set TECH_LEF_FILES {}
 set STD_CELL_LEF_FILES {}
 set TECH_LIB_FILES [list \
-    "pdk/asap7/asap7sc7p5t_27/LIB/NLDM/asap7sc7p5t_SIMPLE_RVT_TT_nldm_201020.lib" \
-    "pdk/asap7/asap7sc7p5t_27/LIB/NLDM/asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib" \
+    "pdk/asap7sc7p5t_SIMPLE_RVT_TT_nldm_201020.lib" \
+    "pdk/asap7sc7p5t_SEQ_RVT_TT_nldm_201020.lib" \
 ]
 
 # ASAP7 standard cell height (in tracks)

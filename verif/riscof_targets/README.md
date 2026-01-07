@@ -95,7 +95,7 @@ cd /path/to/riscv/project
 make build-verilator
 ```
 
-This creates `build/verilator/Vtb_soc` which RISCOF will use to run tests.
+This creates `build/verilator/kcore_vsim` which RISCOF will use to run tests.
 
 ## Current Test Results
 
@@ -319,7 +319,7 @@ Build the RTL simulation:
 cd ../..
 make clean
 make build-verilator
-ls -lh build/verilator/Vtb_soc
+ls -lh build/verilator/kcore_vsim
 ```
 
 ### Test Failures

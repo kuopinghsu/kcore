@@ -17,6 +17,8 @@ endif
 CC = $(RISCV_PREFIX)gcc
 OBJDUMP = $(RISCV_PREFIX)objdump
 SIZE = $(RISCV_PREFIX)size
+CROSS_COMPILE = $(RISCV_PREFIX)
+export CROSS_COMPILE
 
 # Get the directory containing the RISC-V toolchain binaries
 RISCV_PREFIX_DIR = $(dir $(shell which $(CC)))
@@ -87,7 +89,7 @@ MEM_WRITE_LATENCY ?= 1
 MEM_DUAL_PORT ?= 1
 
 # Verilator flags (common)
-VLT_FLAGS_COMMON = -Wall -Wno-fatal --cc --exe --build --top-module tb_soc
+VLT_FLAGS_COMMON = -Wall -Wno-fatal --cc --exe --build --top-module tb_soc -o kcore_vsim
 VLT_FLAGS_COMMON += -Wno-UNOPTFLAT -Wno-WIDTH -Wno-UNUSED -Wno-TIMESCALEMOD
 VLT_FLAGS_COMMON += -GMEM_READ_LATENCY=$(MEM_READ_LATENCY) -GMEM_WRITE_LATENCY=$(MEM_WRITE_LATENCY) -GMEM_DUAL_PORT=$(MEM_DUAL_PORT)
 VLT_FLAGS_COMMON += -CFLAGS "-DMEM_READ_LATENCY=$(MEM_READ_LATENCY) -DMEM_WRITE_LATENCY=$(MEM_WRITE_LATENCY) -DMEM_DUAL_PORT=$(MEM_DUAL_PORT)"
@@ -370,7 +372,7 @@ build-verilator: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES) sw
 	fi
 	$(VERILATOR) $(VLT_FLAGS) \
 		--Mdir $(VLT_BUILD_DIR) \
-		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.c
+		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.cpp
 	@echo "=== RTL simulation binary built ==="
 
 # Build Verilator without building software (for FreeRTOS builds)
@@ -391,13 +393,13 @@ build-verilator-only: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
 	fi
 	$(VERILATOR) $(VLT_FLAGS) \
 		--Mdir $(VLT_BUILD_DIR) \
-		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.c
+		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.cpp
 	@echo "=== RTL simulation binary built ==="
 
 .PHONY: rtl
 rtl: build-verilator
 	@echo "=== Running RTL simulation ==="
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@echo "=== RTL simulation complete ==="
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
@@ -460,7 +462,7 @@ freertos-rtl-%: build-verilator-only
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test: $* ==="
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -498,7 +500,6 @@ freertos-compare-%:
 		ls -1 $(FREERTOS_SAMPLES)/*.c 2>/dev/null | xargs -n1 basename | sed 's/\.c$$//' | sed 's/^/  /' || echo "  (none found)"; \
 		exit 1; \
 	fi
-	@$(MAKE) freertos-$*
 	@echo "=== Running and comparing FreeRTOS test: $* ==="
 	@$(MAKE) freertos-rtl-$* TRACE=1
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
@@ -754,8 +755,8 @@ arch-test-setup:
 		echo "Creating Python virtual environment..."; \
 		python3 -m venv $(RISCOF_VENV); \
 		echo "Installing RISCOF..."; \
-		bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && pip3 install --upgrade pip setuptools wheel"; \
-		bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && pip3 install git+https://github.com/riscv/riscof.git@d38859f85fe407bcacddd2efcd355ada4683aee4"; \
+		bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && PIP_USER=false pip3 install --quiet --upgrade pip setuptools wheel"; \
+		bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && PIP_USER=false pip3 install --quiet git+https://github.com/riscv/riscof.git@d38859f85fe407bcacddd2efcd355ada4683aee4"; \
 		echo "RISCOF setup complete."; \
 	else \
 		echo "RISCOF virtual environment already exists."; \
@@ -988,7 +989,6 @@ ZEPHYR_SAMPLES = $(ZEPHYR_DIR)/samples
 # ZEPHYR_BASE is defined in env.config
 # Use cross-compile toolchain variant to use RISC-V toolchain from env.config
 ZEPHYR_TOOLCHAIN_VARIANT = cross-compile
-ZEPHYR_CROSS_COMPILE = $(RISCV_PREFIX)
 
 # Zephyr build output directories
 ZEPHYR_BUILD_DIR = $(BUILD_DIR)/zephyr
@@ -1032,7 +1032,7 @@ zephyr-info:
 	@echo "Configuration:"
 	@echo "  ZEPHYR_BASE:      $(ZEPHYR_BASE)"
 	@echo "  Toolchain:        $(ZEPHYR_TOOLCHAIN_VARIANT)"
-	@echo "  Cross-compile:    $(ZEPHYR_CROSS_COMPILE)"
+	@echo "  Cross-compile:    $(CROSS_COMPILE)"
 	@echo "  Virtual env:      $(ZEPHYR_VENV)"
 	@echo ""
 	@echo "For more information, see: $(ZEPHYR_DIR)/README.md"
@@ -1124,7 +1124,7 @@ zephyr-rtl-%: build-verilator-only
 	fi
 	@$(MAKE) zephyr-$*
 	@echo "=== Running Zephyr Sample: $* ==="
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1164,7 +1164,6 @@ zephyr-compare-%:
 		ls -1d $(ZEPHYR_SAMPLES)/*/ 2>/dev/null | xargs -n1 basename | sed 's/^/  /' || echo "  (none found)"; \
 		exit 1; \
 	fi
-	@$(MAKE) zephyr-$*
 	@echo "=== Running and comparing Zephyr test: $* ==="
 	@$(MAKE) zephyr-rtl-$* TRACE=1
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
@@ -1202,14 +1201,13 @@ zephyr-%: $(BUILD_DIR) zephyr-venv-setup
 	@. $(ZEPHYR_VENV)/bin/activate && \
 		export ZEPHYR_BASE=$(ZEPHYR_BASE) && \
 		export ZEPHYR_TOOLCHAIN_VARIANT=$(ZEPHYR_TOOLCHAIN_VARIANT) && \
-		export CROSS_COMPILE=$(ZEPHYR_CROSS_COMPILE) && \
 		export ZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) && \
 		rm -rf $(ZEPHYR_DIR)/build.$* && \
 		cd $(ZEPHYR_SAMPLES)/$* && \
 		west build -p -b kcore_board -d $(shell pwd)/$(ZEPHYR_DIR)/build.$* -- \
 			-DZEPHYR_BASE=$(ZEPHYR_BASE) \
 			-DZEPHYR_TOOLCHAIN_VARIANT=$(ZEPHYR_TOOLCHAIN_VARIANT) \
-			-DCROSS_COMPILE=$(ZEPHYR_CROSS_COMPILE) \
+			-DCROSS_COMPILE=$(CROSS_COMPILE) \
 			-DZEPHYR_MODULES=$(shell pwd)/$(ZEPHYR_DIR) \
 			-DKCONFIG_ERROR_ON_WARNINGS=OFF
 
@@ -1272,7 +1270,7 @@ nuttx-rtl-%: build-verilator-only
 	@$(MAKE) nuttx-$*
 	@echo "=== Running NuttX sample in RTL simulation: $* ==="
 	@echo "nuttx-rtl-$*" > $(TEST_MARKER)
-	$(VLT_BUILD_DIR)/Vtb_soc +PROGRAM=$(SW_BIN) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1286,14 +1284,13 @@ nuttx-sim-%: build-sim
 	@$(MAKE) nuttx-$*
 	@echo "=== Running NuttX sample in C++ simulation: $* ==="
 	@echo "nuttx-sim-$*" > $(TEST_MARKER)
-	$(SIM_EXEC) $(SW_BIN) $(BUILD_DIR)/spike_trace.txt
+	$(SIM_EXEC) $(SW_ELF) $(BUILD_DIR)/spike_trace.txt
 	@echo "=== NuttX C++ simulation completed ==="
 
 # Pattern rule for NuttX trace comparison: nuttx-compare-<sample>
 # Compares RTL execution with Spike ISA simulator to identify core bugs
 .PHONY: nuttx-compare-%
 nuttx-compare-%: build-verilator-only
-	@$(MAKE) nuttx-$*
 	@echo "=== Comparing NuttX test execution: RTL vs Spike ==="
 	@echo "Building and running RTL simulation with trace..."
 	@$(MAKE) nuttx-rtl-$* TRACE=1
@@ -1366,11 +1363,10 @@ nuttx-%: $(BUILD_DIR) check-nuttx
 	@# Configure and build
 	@cd $(NUTTX_BASE) && \
 		export PATH="$(RISCV_PREFIX_DIR):$$PATH" && \
-		export CROSS_COMPILE=$(RISCV_PREFIX) && \
-		(make distclean 2>/dev/null || true) && \
+		(PATH="$(RISCV_PREFIX_DIR):$$PATH" make distclean 2>/dev/null || true) && \
 		rm -f .config .config.old && \
-		./tools/configure.sh kcore-board:nsh && \
-		make -j$(shell nproc)
+		PATH="$(RISCV_PREFIX_DIR):$$PATH" ./tools/configure.sh kcore-board:nsh && \
+		PATH="$(RISCV_PREFIX_DIR):$$PATH" make -j$(shell nproc)
 	@# Copy output files
 	@mkdir -p $(BUILD_DIR)
 	@cp $(NUTTX_BASE)/nuttx $(SW_ELF)
@@ -1383,7 +1379,8 @@ nuttx-%: $(BUILD_DIR) check-nuttx
 nuttx-clean:
 	@echo "Cleaning NuttX builds..."
 	@if [ -d "$(NUTTX_BASE)" ]; then \
-		cd $(NUTTX_BASE) && make distclean; \
+		cd $(NUTTX_BASE) && \
+		PATH="$(RISCV_PREFIX_DIR):$$PATH" make distclean 2>/dev/null || true; \
 	fi
 	@rm -rf $(NUTTX_BASE)/../build-*
 	@echo "NuttX builds cleaned"

@@ -77,7 +77,7 @@ class kcore(pluginTemplate):
             self.verilator_bin = 'verilator'
 
         # Path to Verilator executable
-        self.dut_exe = os.path.join(self.project_root, 'build/verilator/Vtb_soc')
+        self.dut_exe = os.path.join(self.project_root, 'build/verilator/kcore_vsim')
 
         if 'target_run' in config and config['target_run']=='0':
             self.target_run = False
