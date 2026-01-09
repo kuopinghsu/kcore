@@ -5,8 +5,13 @@ This directory contains the RISCOF configuration for running RISC-V architectura
 ## Overview
 
 RISCOF (RISC-V COmpliance Framework) is used to verify that the kcore implementation complies with the RISC-V ISA specification. It runs the official RISC-V architectural test suite and compares the results between:
-- **DUT (Device Under Test)**: kcore - our RV32IMA processor with Verilator (loads ELF files directly)
-- **Reference Model**: Spike - the official RISC-V ISA simulator (loads ELF files directly)
+
+- **DUT (Device Under Test)**: kcore - RV32IMA processor with Verilator (loads ELF files directly)
+- **Reference Model**: Choice of two simulators:
+  - **Spike** (default): Official RISC-V ISA simulator - authoritative reference
+  - **rv32sim**: kcore custom RV32IMAC software simulator - fast alternative
+
+All three implementations (kcore, rv32sim, spike) support direct ELF loading and produce compatible signature outputs for accurate comparison.
 
 ## Directory Structure
 
@@ -18,10 +23,16 @@ verif/riscof_targets/
 │   ├── kcore_isa.yaml          # ISA specification (RV32IMA)
 │   ├── kcore_platform.yaml     # Platform specification
 │   └── env/                    # Test environment
-└── spike/                      # Reference plugin for Spike
-    ├── riscof_spike.py         # Plugin implementation
-    ├── spike_isa.yaml          # Spike ISA configuration
-    └── env/                    # Spike test environment
+├── spike/                      # Reference plugin for Spike
+│   ├── riscof_spike.py         # Plugin implementation
+│   ├── spike_isa.yaml          # Spike ISA configuration
+│   ├── spike_platform.yaml     # Platform specification
+│   └── env/                    # Spike test environment
+└── rv32sim/                   # Reference plugin for rv32sim
+    ├── riscof_rv32sim.py      # Plugin implementation
+    ├── rv32sim_isa.yaml       # ISA configuration
+    ├── rv32sim_platform.yaml  # Platform specification
+    └── env/                    # Test environment
 ```
 
 ## Prerequisites
@@ -224,6 +235,217 @@ ls riscof_work/
 # View the HTML report
 firefox riscof_work/report.html
 ```
+
+## Reference Models Comparison
+
+RISCOF can use different reference models to compare against the DUT (kcore). Three implementations are available:
+
+### Overview
+
+| Feature | kcore (DUT) | rv32sim | Spike |
+|---------|-------------|---------|-------|
+| **Type** | RTL (Verilator) | Software Simulator | Software Simulator |
+| **Purpose** | Device Under Test | Alternative Reference | Primary Reference |
+| **ISA** | RV32IMA | RV32IMAZicsr_Zifencei | RV32IMACZicsr_Zifencei |
+| **Language** | SystemVerilog | C++ | C++ |
+| **Build** | Requires Verilator | Built with kcore | Separate installation |
+| **Speed** | Slow (~5-10s/test) | Fast (~0.2s/test) | Fast (~0.3s/test) |
+| **GDB Support** | No | Yes | Yes |
+| **Trace Output** | VCD/FST waveforms | Text trace | Text trace |
+| **Maturity** | Development | Stable | Official Reference |
+| **Validation** | Against spike | Against spike | RISC-V Standard |
+
+### Detailed Comparison
+
+#### ISA Support
+- **kcore**: RV32IMA (base integer + multiply/divide + atomics)
+- **rv32sim**: RV32IMA + Zicsr + Zifencei (CSR and fence instructions)
+- **Spike**: Full RISC-V with all extensions (RV32/RV64, IMAFDCV, etc.)
+
+#### Memory Layout
+All three use identical memory configuration:
+- Base: 0x80000000
+- Size: 2MB (0x80000000 - 0x80200000)
+- CLINT: 0x2000000
+
+#### Features
+
+| Feature | kcore | rv32sim | Spike |
+|---------|-------|---------|-------|
+| **Privileged Modes** | M-mode | M-mode | M/S/U modes |
+| **MMU/TLB** | No | No | Full support |
+| **FPU** | No | No | F/D extensions |
+| **Vector** | No | No | V extension |
+| **Compressed (C)** | No | No | Yes |
+| **Signature Output** | Via memory dump | +signature flag | +signature flag |
+| **Instruction Limit** | Cycle timeout | --instructions=N | No |
+| **Interactive Debug** | Waveforms | GDB stub | -d mode |
+
+### When to Use Each Reference Model
+
+#### Primary Reference: Spike
+Use **Spike** for:
+- Official RISC-V compliance validation
+- Final verification before tapeout
+- Industry-standard behavior verification
+- Testing with comprehensive ISA support
+
+#### Secondary Reference: rv32sim
+Use **rv32sim** for:
+- Fast development iterations
+- Understanding kcore software behavior
+- Debugging RTL vs. ISA differences
+- Educational purposes
+- Quick sanity checks
+- Integrated CI/CD testing
+
+Use the provided test script to validate rv32sim produces identical results to spike:
+
+```bash
+cd verif/riscof_targets
+./test_rv32sim.sh I    # Validate RV32I instructions (38 tests)
+./test_rv32sim.sh M    # Validate RV32M instructions (8 tests)
+./test_rv32sim.sh A    # Validate RV32A instructions (9 tests)
+```
+
+This runs RISCOF with rv32sim as DUT and spike as REF, ensuring both simulators produce identical signatures.
+
+## Command-Line Reference
+
+### kcore (Verilator RTL)
+```bash
+# Built via Makefile, executed by RISCOF plugin
+# Signature extracted from memory dump at 0x80002000-0x80004000
+build/verilator/kcore_vsim +max-cycles=100000 test.elf
+```
+
+### rv32sim
+```bash
+# Basic execution
+rv32sim test.elf
+
+# With signature output
+rv32sim +signature=test.sig +signature-granularity=4 test.elf
+
+# With trace logging
+rv32sim --trace --log=trace.txt test.elf
+
+# With instruction limit
+rv32sim --instructions=1000000 test.elf
+
+# With GDB debugging
+rv32sim --gdb --gdb-port=3333 test.elf
+```
+
+### Spike
+```bash
+# Basic execution
+spike --pc=0x80000000 --isa=rv32imac_zicsr_zifencei test.elf
+
+# With signature output
+spike --pc=0x80000000 --isa=rv32imac_zicsr_zifencei \
+      +signature=test.sig +signature-granularity=4 test.elf
+
+# With trace logging
+spike --pc=0x80000000 --isa=rv32imac_zicsr_zifencei \
+      --log-commits test.elf
+```
+
+## Best Practices
+
+### Testing Strategy
+1. **Development**: Use rv32sim for quick iterations and debugging
+2. **Integration**: Use spike for official compliance verification
+3. **Validation**: Cross-check with both reference models
+4. **Production**: Final validation with spike before release
+
+### Performance Optimization
+- Use rv32sim during active development for fast feedback
+- Switch to spike for nightly regression tests
+- Run full spike validation before major releases
+- Use parallel execution (jobs parameter) for large test suites
+
+### Debugging Workflow
+1. **RTL Failure**: Compare kcore vs spike signatures
+2. **Identify Mismatch**: Find first diverging instruction
+3. **Understand Intent**: Run rv32sim with trace to see correct behavior
+4. **Analyze RTL**: Use VCD waveforms to debug kcore implementation
+5. **Verify Fix**: Re-run with both spike and rv32sim
+
+## Validation Results
+
+#### DUT: kcore
+**kcore** is always the device under test, validated against either spike or rv32sim.
+
+### Using rv32sim as Reference Model
+
+By default, RISCOF uses **Spike** as the reference model. You can switch to **rv32sim** for faster testing cycles.
+
+### Switch to rv32sim
+
+```bash
+cd verif/riscof_targets
+
+# Edit config.ini to use rv32sim
+sed -i '' 's/ReferencePlugin=spike/ReferencePlugin=rv32sim/' config.ini
+
+# Build rv32sim if not already built
+make -C ../../sim
+
+# Run tests with rv32sim as reference
+source .venv/bin/activate
+riscof run --config=config.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/I \
+    --env=../riscv-arch-test/riscv-test-suite/env
+
+# Restore spike as reference (optional)
+sed -i '' 's/ReferencePlugin=rv32sim/ReferencePlugin=spike/' config.ini
+```
+
+### Building rv32sim
+
+The rv32sim simulator is located in `sim/` and requires no external dependencies:
+
+```bash
+cd /path/to/kcore
+make -C sim clean
+make -C sim
+# Creates build/rv32sim
+```
+
+### Running Tests Manually with rv32sim
+
+You can also run tests directly with rv32sim:
+
+```bash
+# Run a test with signature output
+build/rv32sim +signature=output.sig +signature-granularity=4 test.elf
+
+# With trace logging
+build/rv32sim --trace --log=trace.txt +signature=output.sig test.elf
+
+# Compare with spike
+spike --pc=0x80000000 --isa=rv32imac_zicsr_zifencei \
+      +signature=spike.sig +signature-granularity=4 test.elf
+diff output.sig spike.sig
+```
+
+### Validate rv32sim Against Spike
+
+Use the validation script to test rv32sim against spike:
+
+```bash
+cd verif/riscof_targets
+
+# Validate RV32I instructions (rv32sim as DUT, spike as REF)
+./test_rv32sim.sh I
+
+# Validate other test suites
+./test_rv32sim.sh M      # RV32M multiply/divide
+./test_rv32sim.sh A      # RV32A atomics
+./test_rv32sim.sh Zicsr  # Zicsr CSR operations
+```
+
+This script runs RISCOF with **rv32sim as the DUT** and **spike as the reference**, ensuring rv32sim produces identical results to the official RISC-V simulator.
 
 ## Test Coverage
 

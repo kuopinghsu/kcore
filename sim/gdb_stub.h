@@ -26,15 +26,34 @@ typedef struct {
     bool enabled;
 } breakpoint_t;
 
-#define MAX_BREAKPOINTS 32
+// Watchpoint types
+typedef enum {
+    WATCHPOINT_WRITE = 2,  // Z2: write watchpoint
+    WATCHPOINT_READ = 3,   // Z3: read watchpoint
+    WATCHPOINT_ACCESS = 4  // Z4: access (read+write) watchpoint
+} watchpoint_type_t;
+
+// Watchpoint management
+typedef struct {
+    uint32_t addr;
+    uint32_t len;
+    watchpoint_type_t type;
+    bool enabled;
+} watchpoint_t;
+
+#define MAX_BREAKPOINTS 64
+#define MAX_WATCHPOINTS 32
 
 // GDB stub interface
 typedef struct {
     gdb_stub_t stub;
     breakpoint_t breakpoints[MAX_BREAKPOINTS];
     int breakpoint_count;
+    watchpoint_t watchpoints[MAX_WATCHPOINTS];
+    int watchpoint_count;
     bool single_step;
     bool should_stop;
+    uint32_t last_watchpoint_addr;  // Address of last hit watchpoint
 } gdb_context_t;
 
 // Callback functions for simulator access
@@ -73,6 +92,16 @@ void gdb_stub_close(gdb_context_t *ctx);
 int gdb_stub_add_breakpoint(gdb_context_t *ctx, uint32_t addr);
 int gdb_stub_remove_breakpoint(gdb_context_t *ctx, uint32_t addr);
 void gdb_stub_clear_breakpoints(gdb_context_t *ctx);
+
+// Watchpoint functions
+int gdb_stub_add_watchpoint(gdb_context_t *ctx, uint32_t addr, uint32_t len, watchpoint_type_t type);
+int gdb_stub_remove_watchpoint(gdb_context_t *ctx, uint32_t addr, uint32_t len, watchpoint_type_t type);
+bool gdb_stub_check_watchpoint_read(gdb_context_t *ctx, uint32_t addr, uint32_t len);
+bool gdb_stub_check_watchpoint_write(gdb_context_t *ctx, uint32_t addr, uint32_t len);
+void gdb_stub_clear_watchpoints(gdb_context_t *ctx);
+
+// Send stop signal to GDB
+int gdb_stub_send_stop_signal(gdb_context_t *ctx, int signal);
 
 #ifdef __cplusplus
 }

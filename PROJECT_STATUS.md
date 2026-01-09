@@ -251,7 +251,7 @@ cat build/test.dump         # Disassembly
 
 ### Verification (sim/)
 
-- **rv32_sim.cpp**: Spike ISA simulator wrapper
+- **rv32sim.cpp**: Spike ISA simulator wrapper
   - Reference model for correctness verification
   - Generates execution traces
 
@@ -1016,7 +1016,7 @@ end
 - `make memtrace` - Run default test with memory trace
 - `make memtrace-<test>` - Run specific test with memory trace (e.g., `make memtrace-interrupt`)
 
-**Automated Verification Script** (`sim/analyze_mem_trace.py`):
+**Automated Verification Script** (`scripts/analyze_mem_trace.py`):
 - Accepts log file as command-line argument or uses default `build/mem_trace.txt`
 - Parses CPU_IMEM, CPU_DMEM, and AXI_MEM transaction logs
 - Verifies address and data consistency for all operations
@@ -1052,7 +1052,7 @@ end
 - `testbench/axi_memory.sv`: Added ENABLE_MEM_TRACE parameter and AXI logging
 - `testbench/tb_soc.sv`: Top-level parameter control
 - `Makefile`: Added memtrace targets and flags
-- `sim/analyze_mem_trace.py`: Verification script
+- `scripts/analyze_mem_trace.py`: Verification script
 - `docs/memory_trace_analysis.md`: Complete documentation
 
 **Status**: ✅ Complete - 100% memory transaction consistency verified
@@ -1139,7 +1139,7 @@ end
 - Standard trace format
 - No simulator maintenance
 
-**Files**: `sim/rv32_sim.cpp`, `sim/trace_compare.py`
+**Files**: `sim/rv32sim.cpp`, `scripts/trace_compare.py`
 
 #### 2. Dual Test Strategy
 - **simple.c**: Minimal smoke test (561 inst, 4882 cycles, CPI ~8.7) - default
@@ -1173,7 +1173,7 @@ end
 4. Unicode encoding fix
 5. Privilege level parsing
 
-**Files**: `sim/trace_compare.py`
+**Files**: `scripts/trace_compare.py`
 
 #### 6. Build Dependencies
 **Feature**: `make compare` auto-runs `sim` and `rtl`  

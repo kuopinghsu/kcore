@@ -262,7 +262,7 @@ make rtl-hello MEMTRACE=1        # Alternative: with specific test
 **What happens automatically:**
 1. Simulation runs with `ENABLE_MEM_TRACE=1`
 2. Memory trace logs extracted to `build/mem_trace.txt`
-3. Verification script `sim/analyze_mem_trace.py` runs automatically
+3. Verification script `scripts/analyze_mem_trace.py` runs automatically
 4. Results displayed with PASS/WARNING/FAIL status
 
 **Note about instruction fetch mismatches:**
@@ -273,7 +273,7 @@ After the instruction fetch race condition fix (Bug #6, Dec 31 2025), instructio
 If you want to run verification separately:
 ```bash
 # After running simulation with MEMTRACE=1
-python3 sim/analyze_mem_trace.py build/mem_trace.txt
+python3 scripts/analyze_mem_trace.py build/mem_trace.txt
 ```
 
 ### Manual Verilator Build
@@ -285,7 +285,7 @@ verilator -GENABLE_MEM_TRACE=1 [other flags] ...
 
 ### Analyzing Trace Logs
 
-The verification script (`sim/analyze_mem_trace.py`) provides:
+The verification script (`scripts/analyze_mem_trace.py`) provides:
 - Transaction counts for CPU_IMEM, CPU_DMEM, and AXI_MEM
 - Instruction fetch verification (warnings for mismatches due to pipeline flushes)
 - Data read/write verification (failures cause test to fail)
@@ -302,7 +302,7 @@ The verification script (`sim/analyze_mem_trace.py`) provides:
 - **rtl/soc_top.sv**: Added ENABLE_MEM_TRACE parameter passthrough
 - **testbench/axi_memory.sv**: Added AXI memory transaction logging (controlled by parameter)
 - **testbench/tb_soc.sv**: Added ENABLE_MEM_TRACE parameter at top level
-- **sim/analyze_mem_trace.py**: Python script to verify transaction consistency
+- **scripts/analyze_mem_trace.py**: Python script to verify transaction consistency
   - **Updated Dec 31, 2025**: Accept filename argument, treat instruction mismatches as warnings
 - **Makefile**: Added MEMTRACE parameter and automatic verification
   - **Updated Dec 31, 2025**: Auto-extract traces, run verification, added memtrace-* targets

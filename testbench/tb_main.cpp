@@ -51,6 +51,30 @@ extern "C" void console_putchar(char c) {
     std::cout << c << std::flush;
 }
 
+// Display help information
+void print_help() {
+    std::cout << "\n=== kcore Verilator Testbench ===" << std::endl;
+    std::cout << "\nUsage: kcore_vsim +PROGRAM=<elf_file> [options]" << std::endl;
+    std::cout << "\nRequired:" << std::endl;
+    std::cout << "  +PROGRAM=<file>              ELF or binary file to load and execute" << std::endl;
+    std::cout << "\nOptions:" << std::endl;
+    std::cout << "  +help                        Display this help message" << std::endl;
+    std::cout << "  +MAX_CYCLES=<n>              Maximum simulation cycles (default: 1000000)" << std::endl;
+    std::cout << "  +signature=<file>            Extract signature region to file" << std::endl;
+    std::cout << "  +signature-granularity=<n>   Signature granularity in bytes (1/2/4/8, default: 4)" << std::endl;
+    std::cout << "  +TRACE                       Enable RTL instruction trace (rtl_trace.txt)" << std::endl;
+    std::cout << "  +WAVE                        Enable waveform dump (dump.fst or dump.vcd)" << std::endl;
+    std::cout << "  +OBJDUMP=<path>              Path to objdump for disassembly" << std::endl;
+    std::cout << "\nEnvironment:" << std::endl;
+    std::cout << "  OBJDUMP                      Default objdump path (env.config or environment)" << std::endl;
+    std::cout << "  RISCOF_DEBUG                 Enable debug mode (set to 1)" << std::endl;
+    std::cout << "\nExamples:" << std::endl;
+    std::cout << "  kcore_vsim +PROGRAM=test.elf" << std::endl;
+    std::cout << "  kcore_vsim +PROGRAM=test.elf +MAX_CYCLES=50000 +TRACE" << std::endl;
+    std::cout << "  kcore_vsim +PROGRAM=test.elf +signature=test.sig +signature-granularity=4" << std::endl;
+    std::cout << std::endl;
+}
+
 // UART monitoring
 void uart_monitor(uint8_t tx_bit) {
     static int uart_state = 0;  // 0=idle, 1=start, 2-9=data, 10=stop
@@ -235,6 +259,21 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Verilated::traceEverOn(true);
 
+    // Check for help flag
+    const char* help_flag = Verilated::commandArgsPlusMatch("help");
+    if (help_flag && help_flag[0] != '\0') {
+        print_help();
+        return 0;
+    }
+
+    // Check if PROGRAM is specified before proceeding
+    const char* prog_arg = Verilated::commandArgsPlusMatch("PROGRAM=");
+    if (!prog_arg || prog_arg[0] == '\0') {
+        print_help();
+        return 1;
+    }
+
+
     #ifdef HAVE_CHRONO
     std::chrono::steady_clock::time_point time_begin;
     std::chrono::steady_clock::time_point time_end;
@@ -284,16 +323,12 @@ int main(int argc, char** argv) {
     std::cout << "  Write latency: " << MEM_WRITE_LATENCY << " cycles" << std::endl;
 #endif
 
-    // Load program
-    const char* prog_arg = Verilated::commandArgsPlusMatch("PROGRAM=");
-    std::string prog_name;
-    if (prog_arg) {
-        prog_name = prog_arg + 9;  // Skip "+PROGRAM="
-        if (!load_program(dut, prog_name)) {
-            return 1;
-        }
-    } else {
-        std::cerr << "Error: No program specified. Use +PROGRAM=<filename>" << std::endl;
+    // Load program (prog_arg already validated above)
+    std::string prog_name = prog_arg + 9;  // Skip "+PROGRAM="
+    if (!load_program(dut, prog_name)) {
+        std::cerr << "Error: Failed to load program: " << prog_name << std::endl;
+        std::cerr << "Use +help for usage information." << std::endl;
+        delete dut;
         return 1;
     }
 
@@ -546,28 +581,31 @@ int main(int argc, char** argv) {
             std::cout << "Exit code: " << (int32_t)dut->exit_code << " (0x"
                       << std::hex << (uint32_t)dut->exit_code << std::dec << ")" << std::endl;
 
-            // Extract signature if requested via +SIGNATURE=
-            const char* sig_arg = Verilated::commandArgsPlusMatch("SIGNATURE=");
-            if (sig_arg) {
-                std::string sig_file = sig_arg + 11;  // Skip "+SIGNATURE="
+            // Extract signature if requested via +signature=
+            const char* sig_arg = Verilated::commandArgsPlusMatch("signature=");
+            if (sig_arg && sig_arg[0] != '\0') {
+                std::string sig_file = sig_arg + 11;  // Skip "+signature="
 
-                // Get signature begin/end addresses
-                uint32_t sig_begin = 0, sig_end = 0;
+                // Get signature begin/end addresses from ELF symbols
+                if (g_symbols.find("begin_signature") != g_symbols.end() && 
+                    g_symbols.find("end_signature") != g_symbols.end()) {
+                    
+                    uint32_t sig_begin = g_symbols["begin_signature"].addr;
+                    uint32_t sig_end = g_symbols["end_signature"].addr;
 
-                const char* sig_begin_arg = Verilated::commandArgsPlusMatch("SIG_BEGIN=");
-                if (sig_begin_arg) {
-                    sscanf(sig_begin_arg, "+SIG_BEGIN=%x", &sig_begin);
-                }
-
-                const char* sig_end_arg = Verilated::commandArgsPlusMatch("SIG_END=");
-                if (sig_end_arg) {
-                    sscanf(sig_end_arg, "+SIG_END=%x", &sig_end);
-                }
-
-                if (sig_begin && sig_end) {
+                    // Get signature granularity (default: 4 bytes)
+                    int granularity = 4;
+                    const char* gran_arg = Verilated::commandArgsPlusMatch("signature-granularity=");
+                    if (gran_arg && gran_arg[0] != '\0') {
+                        sscanf(gran_arg, "+signature-granularity=%d", &granularity);
+                        if (granularity != 1 && granularity != 2 && granularity != 4 && granularity != 8) {
+                            std::cerr << "Warning: Invalid granularity " << granularity << ", using 4" << std::endl;
+                            granularity = 4;
+                        }
+                    }
 
                     std::cout << "Extracting signature from 0x" << std::hex << sig_begin
-                              << " to 0x" << sig_end << std::dec << std::endl;
+                              << " to 0x" << sig_end << " (granularity: " << std::dec << granularity << " bytes)" << std::endl;
 
                     // Set the scope for DPI calls to the memory module
                     svSetScope(svGetScopeFromName("TOP.tb_soc.u_memory"));
@@ -575,18 +613,23 @@ int main(int argc, char** argv) {
                     // Dump signature to file
                     std::ofstream sig_out(sig_file);
                     if (sig_out.is_open()) {
-                        for (uint32_t addr = sig_begin; addr < sig_end; addr += 4) {
-                            uint32_t word = 0;
-                            for (int i = 0; i < 4; i++) {
-                                word |= ((uint8_t)mem_read_byte(addr + i)) << (i * 8);
+                        for (uint32_t addr = sig_begin; addr < sig_end; addr += granularity) {
+                            uint64_t value = 0;
+                            for (int i = 0; i < granularity; i++) {
+                                value |= ((uint64_t)(uint8_t)mem_read_byte(addr + i)) << (i * 8);
                             }
-                            sig_out << std::hex << std::setw(8) << std::setfill('0') << word << std::endl;
+                            
+                            // Format output based on granularity
+                            int width = granularity * 2;  // 2 hex digits per byte
+                            sig_out << std::hex << std::setw(width) << std::setfill('0') << value << std::endl;
                         }
                         sig_out.close();
                         std::cout << "Signature written to " << sig_file << std::endl;
                     } else {
                         std::cerr << "Error: Could not open signature file: " << sig_file << std::endl;
                     }
+                } else {
+                    std::cerr << "Warning: begin_signature or end_signature symbols not found in ELF" << std::endl;
                 }
             }
 

@@ -4,14 +4,18 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Magic console address - write character to output
 #define CONSOLE_MAGIC_ADDR 0xFFFFFFF4
 
 // Memory-mapped console magic address
 volatile unsigned int* const console_putc = (unsigned int*)CONSOLE_MAGIC_ADDR;
 
-// Simple putc function for console output
-void putc(char c) {
+// Simple console output function
+void console_putchar(char c) {
     *console_putc = (unsigned int)c;
 }
 
@@ -70,3 +74,60 @@ void *_sbrk(int incr) {
 
     return (void *)prev_heap_end;
 }
+
+// Exit program by writing to tohost
+void _exit(int status) {
+    // Write debug message
+    const char msg[] = "\n[_exit called with status=";
+    _write(1, (char*)msg, sizeof(msg)-1);
+    
+    char buf[16];
+    int i = 0;
+    int val = status;
+    if (val < 0) {
+        const char minus[] = "-";
+        _write(1, (char*)minus, 1);
+        val = -val;
+    }
+    if (val == 0) {
+        buf[i++] = '0';
+    } else {
+        char temp[16];
+        int j = 0;
+        while (val > 0) {
+            temp[j++] = '0' + (val % 10);
+            val /= 10;
+        }
+        while (j > 0) {
+            buf[i++] = temp[--j];
+        }
+    }
+    _write(1, buf, i);
+    const char end[] = "]\n";
+    _write(1, (char*)end, 2);
+    
+    // tohost protocol: write (exit_code << 1) | 1
+    // For exit, we just use exit_code << 1
+    extern volatile unsigned long tohost;
+    tohost = (status << 1) | 1;
+    
+    // Hang forever after exit
+    while (1) {
+        __asm__ volatile ("nop");
+    }
+}
+
+// Wrapped fflush to handle NULL FILE pointers safely
+// Use -Wl,--wrap=fflush to enable this wrapper
+int __real_fflush(void *stream);
+int __wrap_fflush(void *stream) {
+    // In our freestanding environment, printf uses _write directly (unbuffered)
+    // so fflush is always a no-op. Just return success.
+    (void)stream;
+    (void)__real_fflush;
+    return 0;
+}
+
+#ifdef __cplusplus
+}
+#endif

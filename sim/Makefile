@@ -1,5 +1,5 @@
 # Makefile for RV32IMAC Software Simulator
-# Builds rv32_sim with GDB stub support
+# Builds rv32sim with GDB stub support
 
 # Load environment configuration
 -include ../env.config
@@ -14,12 +14,12 @@ CFLAGS = -std=c11 -O2 -Wall
 CXXFLAGS = -std=c++14 -O2 -Wall
 
 # Source files
-SOURCES = rv32_sim.cpp gdb_stub.c
-HEADERS = rv32_sim.h gdb_stub.h
-OBJECTS = $(BUILD_DIR)/rv32_sim.o $(BUILD_DIR)/gdb_stub.o
+SOURCES = rv32sim.cpp gdb_stub.c
+HEADERS = rv32sim.h gdb_stub.h
+OBJECTS = $(BUILD_DIR)/rv32sim.o $(BUILD_DIR)/gdb_stub.o
 
 # Target binary
-TARGET = $(BUILD_DIR)/rv32_sim
+TARGET = $(BUILD_DIR)/rv32sim
 
 # ============================================================================
 # Build targets
@@ -34,9 +34,9 @@ $(TARGET): $(OBJECTS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJECTS)
 	@echo "Build complete: $(TARGET)"
 
-$(BUILD_DIR)/rv32_sim.o: rv32_sim.cpp rv32_sim.h gdb_stub.h | $(BUILD_DIR)
-	@echo "Compiling rv32_sim.cpp..."
-	$(CXX) $(CXXFLAGS) -c -o $@ rv32_sim.cpp
+$(BUILD_DIR)/rv32sim.o: rv32sim.cpp rv32sim.h gdb_stub.h | $(BUILD_DIR)
+	@echo "Compiling rv32sim.cpp..."
+	$(CXX) $(CXXFLAGS) -c -o $@ rv32sim.cpp
 
 $(BUILD_DIR)/gdb_stub.o: gdb_stub.c gdb_stub.h | $(BUILD_DIR)
 	@echo "Compiling gdb_stub.c..."
@@ -59,7 +59,7 @@ help:
 	@echo "RV32IMAC Software Simulator Makefile"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all     - Build rv32_sim simulator (default)"
+	@echo "  all     - Build rv32sim simulator (default)"
 	@echo "  clean   - Remove build artifacts"
 	@echo "  help    - Show this help message"
 	@echo ""

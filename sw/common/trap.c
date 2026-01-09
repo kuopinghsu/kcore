@@ -1,12 +1,16 @@
 // Default trap handler for RISC-V exceptions and interrupts
 // This is a weak function that can be overridden by user code
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // External putc function from syscall.c
-extern void putc(char c);
+extern void console_putchar(char c);
 
 static void trap_puts(const char* str) {
     while (*str) {
-        putc(*str++);
+        console_putchar(*str++);
     }
 }
 
@@ -14,7 +18,7 @@ static void trap_print_hex(unsigned int val) {
     const char hex[] = "0123456789abcdef";
     trap_puts("0x");
     for (int i = 7; i >= 0; i--) {
-        putc(hex[(val >> (i * 4)) & 0xf]);
+        console_putchar(hex[(val >> (i * 4)) & 0xf]);
     }
 }
 
@@ -66,3 +70,6 @@ __attribute__((weak)) void trap_handler(unsigned int mcause, unsigned int mepc, 
         while (1);
     }
 }
+#ifdef __cplusplus
+}
+#endif

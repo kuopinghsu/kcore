@@ -169,8 +169,8 @@ RV32Simulator::RV32Simulator(uint32_t base, uint32_t size)
     : pc(0), running(true), exit_code(0), inst_count(0), tohost_addr(0),
       trace_enabled(false), mem_base(base), mem_size(size), gdb_ctx(nullptr),
       gdb_enabled(false), gdb_stepping(false), max_instructions(0),
-      signature_start(0), signature_end(0), signature_granularity(4), 
-      signature_enabled(false) {
+      signature_start(0), signature_end(0), signature_granularity(4),
+      signature_enabled(false), exception_occurred(false), exception_pc(0) {
     memory = new uint8_t[mem_size]();
     memset(regs, 0, sizeof(regs));
     regs[0] = 0; // x0 is always 0
@@ -423,16 +423,30 @@ void RV32Simulator::check_interrupts() {
 
 // Memory access
 uint32_t RV32Simulator::read_mem(uint32_t addr, int size) {
+    // Check for misaligned access
+    if ((size == 2 && (addr & 0x1)) || (size == 4 && (addr & 0x3))) {
+        // Misaligned access - raise exception
+        // Set mcause to load address misaligned (4)
+        write_csr(CSR_MCAUSE, 4);
+        write_csr(CSR_MTVAL, addr);
+        write_csr(CSR_MEPC, pc);
+        // Set exception flag to jump to trap handler
+        exception_occurred = true;
+        uint32_t mtvec = read_csr(CSR_MTVEC);
+        exception_pc = mtvec & ~0x3; // Clear mode bits
+        return 0;
+    }
+
     // Check watchpoints before memory read (if GDB enabled and not during instruction fetch)
     if (gdb_enabled && gdb_ctx && addr != pc) {
         gdb_context_t* gdb = (gdb_context_t*)gdb_ctx;
         if (gdb_stub_check_watchpoint_read(gdb, addr, size)) {
             gdb->should_stop = true;
-            std::cout << "Read watchpoint hit at 0x" << std::hex << addr 
+            std::cout << "Read watchpoint hit at 0x" << std::hex << addr
                       << " size=" << std::dec << size << std::endl;
         }
     }
-    
+
     // Handle magic addresses
     if (addr == CONSOLE_MAGIC_ADDR) {
         return 0; // Read from console (not typically used)
@@ -481,17 +495,31 @@ uint32_t RV32Simulator::read_mem(uint32_t addr, int size) {
 }
 
 void RV32Simulator::write_mem(uint32_t addr, uint32_t value, int size) {
+    // Check for misaligned access
+    if ((size == 2 && (addr & 0x1)) || (size == 4 && (addr & 0x3))) {
+        // Misaligned access - raise exception
+        // Set mcause to store/AMO address misaligned (6)
+        write_csr(CSR_MCAUSE, 6);
+        write_csr(CSR_MTVAL, addr);
+        write_csr(CSR_MEPC, pc);
+        // Set exception flag to jump to trap handler
+        exception_occurred = true;
+        uint32_t mtvec = read_csr(CSR_MTVEC);
+        exception_pc = mtvec & ~0x3; // Clear mode bits
+        return;
+    }
+
     // Check watchpoints before memory write (if GDB enabled)
     if (gdb_enabled && gdb_ctx) {
         gdb_context_t* gdb = (gdb_context_t*)gdb_ctx;
         if (gdb_stub_check_watchpoint_write(gdb, addr, size)) {
             gdb->should_stop = true;
-            std::cout << "Write watchpoint hit at 0x" << std::hex << addr 
-                      << " size=" << std::dec << size 
+            std::cout << "Write watchpoint hit at 0x" << std::hex << addr
+                      << " size=" << std::dec << size
                       << " value=0x" << std::hex << value << std::endl;
         }
     }
-    
+
     // Handle magic addresses
     if (addr == CONSOLE_MAGIC_ADDR) {
         // Console output
@@ -570,6 +598,9 @@ int32_t RV32Simulator::sign_extend(uint32_t value, int bits) {
 void RV32Simulator::step() {
     if (!running)
         return;
+
+    // Clear exception flag from previous instruction
+    exception_occurred = false;
 
     // Check for interrupts before fetching instruction
     check_interrupts();
@@ -784,8 +815,12 @@ void RV32Simulator::step() {
         case 0x1:
             if (funct7 == 0x00)
                 result = regs[rs1] << (regs[rs2] & 0x1F); // SLL
-            else if (funct7 == 0x01)
-                result = ((uint64_t)regs[rs1] * regs[rs2]) >> 32; // MULH
+            else if (funct7 == 0x01) {
+                // MULH: signed x signed, upper 32 bits
+                int64_t a = (int32_t)regs[rs1];
+                int64_t b = (int32_t)regs[rs2];
+                result = (int32_t)((a * b) >> 32);
+            }
             break;
         case 0x2:
             if (funct7 == 0x00)
@@ -804,28 +839,64 @@ void RV32Simulator::step() {
         case 0x4:
             if (funct7 == 0x00)
                 result = regs[rs1] ^ regs[rs2]; // XOR
-            else if (funct7 == 0x01)
-                result = (int32_t)regs[rs1] / (int32_t)regs[rs2]; // DIV
+            else if (funct7 == 0x01) {
+                // DIV: signed division with special cases
+                int32_t dividend = (int32_t)regs[rs1];
+                int32_t divisor = (int32_t)regs[rs2];
+                if (divisor == 0) {
+                    result = -1; // Division by zero
+                } else if (dividend == INT32_MIN && divisor == -1) {
+                    result = INT32_MIN; // Overflow case
+                } else {
+                    result = dividend / divisor;
+                }
+            }
             break;
         case 0x5:
             if (funct7 == 0x00)
                 result = regs[rs1] >> (regs[rs2] & 0x1F); // SRL
             else if (funct7 == 0x20)
                 result = (int32_t)regs[rs1] >> (regs[rs2] & 0x1F); // SRA
-            else if (funct7 == 0x01)
-                result = regs[rs1] / regs[rs2]; // DIVU
+            else if (funct7 == 0x01) {
+                // DIVU: unsigned division with special cases
+                uint32_t dividend = regs[rs1];
+                uint32_t divisor = regs[rs2];
+                if (divisor == 0) {
+                    result = 0xFFFFFFFF; // Division by zero returns all 1s
+                } else {
+                    result = dividend / divisor;
+                }
+            }
             break;
         case 0x6:
             if (funct7 == 0x00)
                 result = regs[rs1] | regs[rs2]; // OR
-            else if (funct7 == 0x01)
-                result = (int32_t)regs[rs1] % (int32_t)regs[rs2]; // REM
+            else if (funct7 == 0x01) {
+                // REM: signed remainder with special cases
+                int32_t dividend = (int32_t)regs[rs1];
+                int32_t divisor = (int32_t)regs[rs2];
+                if (divisor == 0) {
+                    result = dividend; // Remainder by zero returns dividend
+                } else if (dividend == INT32_MIN && divisor == -1) {
+                    result = 0; // Overflow case
+                } else {
+                    result = dividend % divisor;
+                }
+            }
             break;
         case 0x7:
             if (funct7 == 0x00)
                 result = regs[rs1] & regs[rs2]; // AND
-            else if (funct7 == 0x01)
-                result = regs[rs1] % regs[rs2]; // REMU
+            else if (funct7 == 0x01) {
+                // REMU: unsigned remainder with special cases
+                uint32_t dividend = regs[rs1];
+                uint32_t divisor = regs[rs2];
+                if (divisor == 0) {
+                    result = dividend; // Remainder by zero returns dividend
+                } else {
+                    result = dividend % divisor;
+                }
+            }
             break;
         }
         if (rd != 0) {
@@ -999,7 +1070,26 @@ void RV32Simulator::step() {
                    trace_mem_addr, trace_mem_val, trace_is_store, trace_is_csr,
                    trace_csr_num);
     regs[0] = 0; // x0 is always 0
-    pc = next_pc;
+    
+    // Check if exception occurred during instruction execution
+    if (exception_occurred) {
+        pc = exception_pc;
+        exception_occurred = false;
+    } else {
+        // Check for misaligned instruction address (must be 4-byte aligned)
+        if (next_pc & 0x3) {
+            // Misaligned instruction fetch - raise exception
+            // Set mcause to instruction address misaligned (0)
+            write_csr(CSR_MCAUSE, 0);
+            write_csr(CSR_MTVAL, next_pc);
+            write_csr(CSR_MEPC, exec_pc);
+            // Jump to trap handler (mtvec)
+            uint32_t mtvec = read_csr(CSR_MTVEC);
+            pc = mtvec & ~0x3; // Clear mode bits
+        } else {
+            pc = next_pc;
+        }
+    }
 
     // Safety check
     if (inst_count > 100000000) {
@@ -1102,7 +1192,7 @@ void RV32Simulator::run() {
     if (gdb_enabled) {
         std::cout << "GDB stub enabled, waiting for GDB connection..." << std::endl;
         gdb_context_t* gdb = (gdb_context_t*)gdb_ctx;
-        
+
         // Setup callbacks
         gdb_callbacks_t callbacks = {
             .read_reg = gdb_read_reg,
@@ -1114,18 +1204,18 @@ void RV32Simulator::run() {
             .single_step = gdb_single_step,
             .is_running = gdb_is_running
         };
-        
+
         // Wait for GDB to connect
         if (gdb_stub_accept(gdb) < 0) {
             std::cerr << "Failed to accept GDB connection" << std::endl;
             return;
         }
-        
+
         std::cout << "GDB connected, starting debug session" << std::endl;
-        
+
         // Start in stopped state, wait for GDB to issue continue/step
         gdb->should_stop = true;
-        
+
         // GDB debug loop
         while (running) {
             // Process GDB commands
@@ -1134,7 +1224,7 @@ void RV32Simulator::run() {
                 std::cout << "GDB disconnected" << std::endl;
                 break;
             }
-            
+
             // If GDB issued continue/step command (result == 1), execute
             if (result == 1 && !gdb->should_stop) {
                 // For single-step, execute just one instruction
@@ -1143,18 +1233,18 @@ void RV32Simulator::run() {
                     gdb->should_stop = true;
                     gdb->single_step = false;
                     gdb_stub_send_stop_signal(gdb, 5); // SIGTRAP after single step
-                } 
+                }
                 // For continue, keep executing until breakpoint or exit
                 else {
                     while (running && !gdb->should_stop) {
                         step();
-                        
+
                         // Check if watchpoint was hit during execution (set by read_mem/write_mem)
                         if (gdb->should_stop) {
                             gdb_stub_send_stop_signal(gdb, 5); // SIGTRAP
                             break;
                         }
-                        
+
                         // Check for breakpoint at new PC after execution
                         if (gdb_stub_check_breakpoint(gdb, pc)) {
                             // Hit breakpoint, stop and notify GDB
@@ -1163,7 +1253,7 @@ void RV32Simulator::run() {
                             std::cout << "Breakpoint hit at 0x" << std::hex << pc << std::endl;
                             break;
                         }
-                        
+
                         // Check instruction limit (if set)
                         if (max_instructions > 0 && inst_count >= max_instructions) {
                             std::cout << "\n[LIMIT] Reached instruction limit: " << std::dec << inst_count << std::endl;
@@ -1181,7 +1271,7 @@ void RV32Simulator::run() {
         // Normal execution without GDB
         while (running) {
             step();
-            
+
             // Check instruction limit (if set)
             if (max_instructions > 0 && inst_count >= max_instructions) {
                 std::cout << "\n[LIMIT] Reached instruction limit: " << std::dec << inst_count << std::endl;
@@ -1194,7 +1284,7 @@ void RV32Simulator::run() {
     std::cout << "Instructions executed: " << std::dec << inst_count
               << std::endl;
     std::cout << "Exit code: " << exit_code << std::endl;
-    
+
     // Write signature file if enabled
     write_signature();
 }
@@ -1292,9 +1382,9 @@ int main(int argc, char *argv[]) {
         } else if (strncmp(argv[i], "+signature-granularity=", 23) == 0) {
             char *endptr;
             signature_granularity = strtoul(argv[i] + 23, &endptr, 10);
-            if (*endptr != '\0' || (signature_granularity != 1 && 
+            if (*endptr != '\0' || (signature_granularity != 1 &&
                 signature_granularity != 2 && signature_granularity != 4)) {
-                std::cerr << "Invalid signature granularity (must be 1, 2, or 4): " 
+                std::cerr << "Invalid signature granularity (must be 1, 2, or 4): "
                           << (argv[i] + 23) << std::endl;
                 return 1;
             }
@@ -1364,7 +1454,7 @@ int main(int argc, char *argv[]) {
         std::cout << "Trace: enabled -> " << log_file << std::endl;
     }
     if (signature_file) {
-        std::cout << "Signature: enabled -> " << signature_file 
+        std::cout << "Signature: enabled -> " << signature_file
                   << " (granularity=" << signature_granularity << ")" << std::endl;
     }
     if (gdb_enabled) {
@@ -1378,7 +1468,7 @@ int main(int argc, char *argv[]) {
     if (trace_enabled) {
         sim.enable_trace(log_file);
     }
-    
+
     if (signature_file) {
         sim.enable_signature(signature_file, signature_granularity);
     }
@@ -1390,13 +1480,13 @@ int main(int argc, char *argv[]) {
     if (gdb_enabled) {
         gdb_context_t* gdb_ctx = new gdb_context_t();
         memset(gdb_ctx, 0, sizeof(gdb_context_t));
-        
+
         if (gdb_stub_init(gdb_ctx, gdb_port) < 0) {
             std::cerr << "Failed to initialize GDB stub" << std::endl;
             delete gdb_ctx;
             return 1;
         }
-        
+
         sim.gdb_ctx = gdb_ctx;
         sim.gdb_enabled = true;
     }

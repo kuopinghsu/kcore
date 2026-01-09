@@ -260,7 +260,7 @@ nuttx-sim-%: nuttx-% $(SIM_EXEC)
 .PHONY: nuttx-compare-%
 nuttx-compare-%: nuttx-rtl-% nuttx-sim-%
 	@echo "=== Comparing traces: $* ==="
-	python3 $(SIM_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
+	python3 $(SCRIPTS_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
 ```
 
 **Usage Examples:**

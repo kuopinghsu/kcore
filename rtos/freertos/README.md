@@ -560,7 +560,7 @@ printf("%s\n", buffer);
 **4. Call trace analysis**:
 ```bash
 # Generate call trace report
-python3 sim/parse_call_trace.py build/rtl_trace.txt \
+python3 scripts/parse_call_trace.py build/rtl_trace.txt \
     build/test.elf riscv-none-elf- call_trace.txt
 ```
 

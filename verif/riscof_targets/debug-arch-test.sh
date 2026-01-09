@@ -30,7 +30,7 @@ if [ -n "$1" ]; then
     # Run RISCOF with single test pattern
     cd "$PROJECT_ROOT"
     python3 -m riscof run \
-        --config="$VERIF_DIR/config.ini" \
+        --config="$VERIF_DIR/config_rtl.ini" \
         --suite="$PROJECT_ROOT/verif/riscv-arch-test/riscv-test-suite" \
         --env="$PROJECT_ROOT/verif/riscv-arch-test/riscv-test-suite/env" \
         --work-dir="$VERIF_DIR/riscof_work" \

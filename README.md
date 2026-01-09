@@ -86,6 +86,7 @@ A complete RISC-V RV32IMA processor implementation with 5-stage pipeline, suppor
 - Atomic memory operations with read-modify-write FSM
 - Performance: 8.13 DMIPS @ 50 MHz, CPI ~8-9
 - printf() and all C library functions fully functional
+- GDB remote debugging with breakpoints and watchpoints (rv32sim)
 
 **Peripherals**:
 - CLINT: Timer and software interrupts (MRET instruction fully implemented)
@@ -139,7 +140,8 @@ For detailed forwarding logic and hazard detection, see the diagram above.
 For detailed prerequisites, tool requirements, and environment configuration, see **[QUICKSTART.md](QUICKSTART.md)**.
 
 **Required Tools**:
-- RISC-V GCC toolchain, Verilator v5.0+, Spike simulator, Python 3
+- RISC-V GCC toolchain, Verilator v5.0+, Python 3
+- Optional: Spike ISA simulator (default) or use built-in rv32sim (`USE_SPIKE=0`)
 - Tool paths configured in `env.config` file
 
 **Verify Setup**:
@@ -209,6 +211,9 @@ make zephyr-compare-<sample> # Compare Zephyr RTL vs simulator
   - Note: Some AXI fetches may not match CPU reads due to pipeline flushes (branches/interrupts) - this is correct
 - **`MAX_CYCLES=<n>`**: Set simulation cycle limit (default: 10M)
   - Use 0 for unlimited cycles
+- **`USE_SPIKE=<0|1>`**: Select software simulator (default: 1)
+  - `1`: Use Spike ISA simulator (default, requires Spike installation)
+  - `0`: Use built-in rv32sim (always available, includes GDB support)
 
 ### Quick Examples
 
@@ -232,8 +237,10 @@ make memtrace-simple                  # Memory trace for simple test
 # Build system
 make build-hello                      # Build RTL for hello test
 make sw-interrupt                     # Compile interrupt test software
-make sim-full                         # Run software simulator only
+make sim-full                         # Run software simulator (Spike by default)
+make sim-full USE_SPIKE=0             # Run with rv32sim instead
 make compare-simple                   # Compare RTL vs simulator traces
+make compare-simple USE_SPIKE=0       # Compare using rv32sim
 ```
 
 ### Performance Tips
@@ -547,6 +554,21 @@ riscv/
 ```
 
 ## Debugging and Customization
+
+**GDB Interactive Debugging** (rv32sim only):
+```bash
+# Terminal 1: Start simulator with GDB stub
+./build/rv32sim --gdb --gdb-port=3333 build/test.elf
+
+# Terminal 2: Connect with GDB
+riscv32-unknown-elf-gdb build/test.elf
+(gdb) target remote localhost:3333
+(gdb) break main
+(gdb) watch myvar          # Write watchpoint
+(gdb) rwatch myvar         # Read watchpoint
+(gdb) awatch myvar         # Access watchpoint
+(gdb) continue
+```
 
 **Enable Waveforms**:
 ```bash

@@ -192,6 +192,10 @@ public:
     uint32_t csr_mtval;
     uint32_t csr_mip;
 
+    // Exception handling
+    bool exception_occurred;
+    uint32_t exception_pc;
+
     RV32Simulator(uint32_t base = MEM_BASE, uint32_t size = MEM_SIZE);
     ~RV32Simulator();
 

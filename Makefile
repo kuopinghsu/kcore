@@ -15,6 +15,7 @@ endif
 
 # Toolchain commands
 CC = $(RISCV_PREFIX)gcc
+CXX = $(RISCV_PREFIX)g++
 OBJDUMP = $(RISCV_PREFIX)objdump
 SIZE = $(RISCV_PREFIX)size
 CROSS_COMPILE = $(RISCV_PREFIX)
@@ -52,6 +53,7 @@ CFLAGS += -ffreestanding -nostartfiles
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -I$(SW_DIR)/include
 LDFLAGS = -T $(SW_COMMON_DIR)/link.ld -Wl,--gc-sections -Wl,-Map=$(BUILD_DIR)/test.map
+LDFLAGS += -Wl,--wrap=fflush
 LDFLAGS += -lc -lgcc
 
 # Determine test source files
@@ -64,6 +66,14 @@ ifneq ($(wildcard $(TEST_DIR)/*.c),)
     # Test directory exists with .c files
     TEST_C_SOURCES = $(wildcard $(TEST_DIR)/*.c)
     SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(TEST_C_SOURCES)
+else ifneq ($(wildcard $(TEST_DIR)/*.cpp),)
+    # Test directory exists with .cpp files (C++ test)
+    TEST_CPP_SOURCES = $(wildcard $(TEST_DIR)/*.cpp)
+    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(TEST_CPP_SOURCES)
+    # Use C++ compiler and add C++ flags
+    CC = $(CXX)
+    CFLAGS += -fno-exceptions -fno-rtti
+    LDFLAGS += -lstdc++
 else ifneq ($(wildcard $(TEST_FILE)),)
     # Single test file exists
     SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(TEST_FILE)
@@ -150,14 +160,26 @@ endif
 endif
 
 # Software simulator
-SIM_SRC = $(SIM_DIR)/rv32_sim.cpp
-SIM_BIN = $(BUILD_DIR)/rv32_sim
+SIM_BIN = $(BUILD_DIR)/rv32sim
+
+# Scripts directory
+SCRIPTS_DIR = scripts
 
 # Trace comparison script
-TRACE_CMP = $(SIM_DIR)/trace_compare.py
+TRACE_CMP = $(SCRIPTS_DIR)/trace_compare.py
 
 # Memory trace verification script
-MEM_TRACE_VERIFY = $(SIM_DIR)/analyze_mem_trace.py
+MEM_TRACE_VERIFY = $(SCRIPTS_DIR)/analyze_mem_trace.py
+
+# Software simulator selection: USE_SPIKE (default: 1)
+# USE_SPIKE=0 - Use rv32sim
+# USE_SPIKE=1 - Use Spike ISA simulator (default)
+USE_SPIKE ?= 0
+ifeq ($(USE_SPIKE),1)
+SW_SIM = $(SPIKE)
+else
+SW_SIM = $(BUILD_DIR)/rv32sim
+endif
 
 # ============================================================================
 # Default target - show help
@@ -246,6 +268,7 @@ help:
 	@echo "  arch-test-rv32a       - Run RV32A atomic instruction tests"
 	@echo "  arch-test-rv32zicsr   - Run Zicsr CSR instruction tests"
 	@echo "  arch-test-all         - Run all architectural tests (I+M+A+Zicsr)"
+	@echo "  arch-test-sim         - Test rv32sim (DUT) vs spike (REF) - all ISAs"
 	@echo "  arch-test-report      - Open test report in browser"
 	@echo "  arch-test-clean       - Clean RISCOF work directory"
 	@echo "  arch-test-clean-all   - Clean RISCOF work directory and virtual environment"
@@ -265,6 +288,9 @@ help:
 	@echo "                      pipeline flushes (branches/interrupts) - this is correct"
 	@echo "  MAX_CYCLES=<n>    - Set simulation cycle limit (default: 10M)"
 	@echo "                      Use 0 for unlimited cycles"
+	@echo "  USE_SPIKE=<0|1>   - Select software simulator (default: 0)"
+	@echo "                      0: Use rv32sim (built-in simulator)"
+	@echo "                      1: Use Spike ISA simulator"
 	@echo ""
 	@echo "Quick Examples:"
 	@echo "  make rtl                              # Fast: no waveform, default test"
@@ -332,22 +358,6 @@ $(SW_DUMP): $(SW_ELF)
 sw-%:
 	@$(MAKE) TEST=$* sw
 
-# Build software for all tests
-.PHONY: sw-all
-sw-all:
-	@echo "=== Building software for all tests ==="
-	@for test in $(ALL_TESTS); do \
-		echo "" ; \
-		echo "======================================" ; \
-		echo "Building software for test: $$test" ; \
-		echo "======================================" ; \
-		$(MAKE) TEST=$$test sw || exit 1 ; \
-	done
-	@echo ""
-	@echo "======================================"
-	@echo "All software builds completed successfully"
-	@echo "======================================"
-
 # ============================================================================
 # RTL Simulation with Verilator
 # ============================================================================
@@ -356,28 +366,7 @@ sw-all:
 MAX_CYCLES ?=
 
 .PHONY: build-verilator
-build-verilator: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES) sw
-	@echo "=== Building RTL simulation with Verilator ==="
-	@if [ "$(WAVE)" = "fst" ]; then \
-		echo "    Waveform: FST"; \
-	elif [ "$(WAVE)" = "vcd" ]; then \
-		echo "    Waveform: VCD"; \
-	else \
-		echo "    Waveform: None (fastest)"; \
-	fi
-	@if [ "$(TRACE)" = "1" ]; then \
-		echo "    RTL trace: Enabled"; \
-	else \
-		echo "    RTL trace: Disabled"; \
-	fi
-	$(VERILATOR) $(VLT_FLAGS) \
-		--Mdir $(VLT_BUILD_DIR) \
-		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.cpp
-	@echo "=== RTL simulation binary built ==="
-
-# Build Verilator without building software (for FreeRTOS builds)
-.PHONY: build-verilator-only
-build-verilator-only: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
+build-verilator: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
 	@echo "=== Building RTL simulation with Verilator ==="
 	@if [ "$(WAVE)" = "fst" ]; then \
 		echo "    Waveform: FST"; \
@@ -397,7 +386,7 @@ build-verilator-only: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
 	@echo "=== RTL simulation binary built ==="
 
 .PHONY: rtl
-rtl: build-verilator
+rtl: sw build-verilator
 	@echo "=== Running RTL simulation ==="
 	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@echo "=== RTL simulation complete ==="
@@ -408,7 +397,7 @@ rtl: build-verilator
 	fi
 	@if [ "$(TRACE)" = "1" ] && [ -f $(BUILD_DIR)/rtl_trace.txt ]; then \
 		echo "=== Parsing call trace ==="; \
-		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
+		python3 $(SCRIPTS_DIR)/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
 		echo "Call trace report: $(BUILD_DIR)/call_trace_report.txt"; \
 	fi
 ifeq ($(MEMTRACE),1)
@@ -437,7 +426,7 @@ build-all:
 		echo "======================================" ; \
 		echo "Building RTL for test: $$test" ; \
 		echo "======================================" ; \
-		$(MAKE) TEST=$$test build-verilator || exit 1 ; \
+		$(MAKE) TEST=$$test sw build-verilator || exit 1 ; \
 	done
 	@echo ""
 	@echo "======================================"
@@ -450,9 +439,9 @@ rtl-dhry:
 	@$(MAKE) TEST=dhry rtl MAX_CYCLES=0
 
 # FreeRTOS targets - use freertos-rtl-<test>, freertos-sim-<test>, etc.
-# Pattern rule for running FreeRTOS tests in RTL simulation
+# FreeRTOS targets - validate, build, then run (skip sw dependency)
 .PHONY: freertos-rtl-%
-freertos-rtl-%: build-verilator-only
+freertos-rtl-%: build-verilator
 	@if [ ! -f $(FREERTOS_SAMPLES)/$*.c ]; then \
 		echo "Error: FreeRTOS sample '$*' not found"; \
 		echo "Expected file: $(FREERTOS_SAMPLES)/$*.c"; \
@@ -462,7 +451,7 @@ freertos-rtl-%: build-verilator-only
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test: $* ==="
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -470,12 +459,11 @@ freertos-rtl-%: build-verilator-only
 	fi
 	@if [ "$(TRACE)" = "1" ] && [ -f $(BUILD_DIR)/rtl_trace.txt ]; then \
 		echo "=== Parsing call trace ==="; \
-		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
+		python3 $(SCRIPTS_DIR)/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
 		echo "Call trace report: $(BUILD_DIR)/call_trace_report.txt"; \
 	fi
 	@echo "=== FreeRTOS test complete ==="
 
-# Pattern rule for running FreeRTOS tests in ISS simulator
 .PHONY: freertos-sim-%
 freertos-sim-%: build-sim
 	@if [ ! -f $(FREERTOS_SAMPLES)/$*.c ]; then \
@@ -487,10 +475,12 @@ freertos-sim-%: build-sim
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test in Simulator: $* ==="
-	$(SIM_BIN) $(SW_ELF) | tee $(BUILD_DIR)/spike_output.log
-	@echo "=== FreeRTOS simulator test complete ==="
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	else \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	fi
 
-# Pattern rule for comparing FreeRTOS RTL vs Spike traces
 .PHONY: freertos-compare-%
 freertos-compare-%:
 	@if [ ! -f $(FREERTOS_SAMPLES)/$*.c ]; then \
@@ -500,18 +490,19 @@ freertos-compare-%:
 		ls -1 $(FREERTOS_SAMPLES)/*.c 2>/dev/null | xargs -n1 basename | sed 's/\.c$$//' | sed 's/^/  /' || echo "  (none found)"; \
 		exit 1; \
 	fi
+	@$(MAKE) freertos-$*
 	@echo "=== Running and comparing FreeRTOS test: $* ==="
 	@$(MAKE) freertos-rtl-$* TRACE=1
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF); \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(SW_ELF); \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
-	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
+	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
 
 # Pattern rule for test shortcuts
 .PHONY: rtl-%
-rtl-%:
+rtl-%: sw
 	@if [ ! -d $(SW_DIR)/$* ] && [ ! -f $(SW_DIR)/$*.c ]; then \
 		echo "Error: Test '$*' not found"; \
 		echo "Expected: $(SW_DIR)/$*/ (directory) or $(SW_DIR)/$*.c (file)"; \
@@ -519,6 +510,7 @@ rtl-%:
 		find $(SW_DIR) -mindepth 1 -maxdepth 1 -type d ! -name "common" ! -name "include" -exec basename {} \; | sed 's/^/  /' || echo "  (none found)"; \
 		exit 1; \
 	fi
+	@$(MAKE) TEST=$* build-verilator
 	@$(MAKE) TEST=$* rtl
 
 # Run all tests
@@ -544,14 +536,18 @@ rtl-all:
 .PHONY: build-sim
 build-sim: $(BUILD_DIR) $(SIM_BIN)
 
-$(SIM_BIN): $(SIM_SRC)
+$(SIM_BIN):
 	@echo "Building software simulator..."
-	g++ -std=c++14 -O2 -Wall -o $@ $<
+	$(MAKE) -C $(SIM_DIR)
 
 .PHONY: sim
 sim: build-sim sw
 	@echo "=== Running software simulator ==="
-	$(SIM_BIN) $(SW_ELF) $(BUILD_DIR)/spike_trace.txt | tee $(BUILD_DIR)/spike_output.log
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	else \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	fi
 	@echo "=== Software simulation complete ==="
 
 # Pattern rule: sim-<test_name>
@@ -568,7 +564,7 @@ compare: $(TRACE_CMP)
 	@$(MAKE) TRACE=1 rtl
 	@$(MAKE) TRACE=1 sim
 	@echo "=== Comparing traces ==="
-	@python3 $(TRACE_CMP) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
+	@python3 $(TRACE_CMP) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
 
 # Pattern rule: compare-<test_name>
 .PHONY: compare-%
@@ -615,7 +611,7 @@ verify: clean all sim rtl compare
 	@echo "Verification Complete (TEST=$(TEST))"
 	@echo "========================================"
 	@echo "RTL output: $(BUILD_DIR)/rtl_output.log"
-	@echo "SIM output: $(BUILD_DIR)/spike_output.log"
+	@echo "SIM output: $(BUILD_DIR)/sim_output.log"
 	@echo "Waveform:   $(BUILD_DIR)/dump.fst"
 	@echo "========================================"
 
@@ -668,7 +664,7 @@ wave:
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR)
-	rm -f rtl_trace.txt spike_trace.txt dump.fst dump.vcd
+	rm -f rtl_trace.txt sim_trace.txt dump.fst dump.vcd
 	@$(MAKE) -C $(FORMAL_DIR) clean 2>/dev/null || true
 
 .PHONY: clean-all
@@ -715,6 +711,10 @@ arch-test-info:
 	@echo "  RV32A    - Atomic instruction extension"
 	@echo "  RV32Zicsr - Control and Status Register (CSR) instructions"
 	@echo ""
+	@echo "Reference Models:"
+	@echo "  spike (default) - Official RISC-V ISA simulator"
+	@echo "  rv32sim        - kcore custom RV32IMAC software simulator"
+	@echo ""
 	@echo "Available Commands:"
 	@echo "  make arch-test-setup       - Set up RISCOF environment (Python venv + install)"
 	@echo "  make arch-test-validate    - Validate RISCOF configuration files"
@@ -723,14 +723,16 @@ arch-test-info:
 	@echo "  make arch-test-rv32a       - Run RV32A atomic instruction tests"
 	@echo "  make arch-test-rv32zicsr   - Run Zicsr CSR instruction tests"
 	@echo "  make arch-test-all         - Run all architectural tests (I+M+A+Zicsr)"
+	@echo "  make arch-test-sim         - Test rv32sim software simulator"
 	@echo "  make arch-test-report      - Open test report in browser"
 	@echo "  make arch-test-clean       - Clean RISCOF work directory"
 	@echo "  make arch-test-clean-all   - Clean work directory and virtual environment"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make arch-test-setup       # First time setup"
-	@echo "  make arch-test-rv32i       # Run base instruction tests"
-	@echo "  make arch-test-all         # Run all test suites"
+	@echo "  make arch-test-rv32i       # Run base instruction tests on RTL"
+	@echo "  make arch-test-all         # Run all test suites on RTL"
+	@echo "  make arch-test-sim         # Test software simulator"
 	@echo "  make arch-test-report      # View results"
 	@echo ""
 	@echo "Configuration:"
@@ -738,11 +740,18 @@ arch-test-info:
 	@echo "  Virtual env:      $(RISCOF_VENV)"
 	@echo "  Test suite:       $(ARCH_TEST_SUITE)"
 	@echo "  Work directory:   $(RISCOF_WORK)"
+	@echo "  RTL config:       config_rtl.ini"
+	@echo "  Sim config:       config_sim.ini"
 	@echo ""
 	@if [ -d "$(RISCOF_VENV)" ]; then \
 		echo "Status: RISCOF environment is set up"; \
 	else \
 		echo "Status: RISCOF environment not set up (run 'make arch-test-setup')"; \
+	fi
+	@if [ -f "$(BUILD_DIR)/rv32sim" ]; then \
+		echo "Status: rv32sim built and available"; \
+	else \
+		echo "Status: rv32sim not built (run 'make arch-test-setup')"; \
 	fi
 	@echo ""
 	@echo "For detailed instructions, see: $(RISCOF_DIR)/README.md"
@@ -761,31 +770,27 @@ arch-test-setup:
 	else \
 		echo "RISCOF virtual environment already exists."; \
 	fi
-	@echo "=== Generating config.ini with relative paths ==="
-	@echo "[RISCOF]" > $(RISCOF_CONFIG)
-	@echo "ReferencePlugin=spike" >> $(RISCOF_CONFIG)
-	@echo "ReferencePluginPath=spike" >> $(RISCOF_CONFIG)
-	@echo "DUTPlugin=kcore" >> $(RISCOF_CONFIG)
-	@echo "DUTPluginPath=kcore" >> $(RISCOF_CONFIG)
-	@echo "" >> $(RISCOF_CONFIG)
-	@echo "[kcore]" >> $(RISCOF_CONFIG)
-	@echo "pluginpath=kcore" >> $(RISCOF_CONFIG)
-	@echo "ispec=kcore/kcore_isa.yaml" >> $(RISCOF_CONFIG)
-	@echo "pspec=kcore/kcore_platform.yaml" >> $(RISCOF_CONFIG)
-	@echo "target_run=1" >> $(RISCOF_CONFIG)
-	@echo "" >> $(RISCOF_CONFIG)
-	@echo "[spike]" >> $(RISCOF_CONFIG)
-	@echo "pluginpath=spike" >> $(RISCOF_CONFIG)
-	@echo "ispec=spike/spike_isa.yaml" >> $(RISCOF_CONFIG)
-	@echo "pspec=spike/spike_platform.yaml" >> $(RISCOF_CONFIG)
-	@echo "config.ini generated with relative paths (portable across directories)"
+	@echo "=== Building rv32sim reference simulator ==="
+	@$(MAKE) -C sim clean
+	@$(MAKE) -C sim
+	@if [ -f "$(BUILD_DIR)/rv32sim" ]; then \
+		echo "rv32sim built successfully: $(BUILD_DIR)/rv32sim"; \
+	else \
+		echo "Warning: rv32sim build failed"; \
+	fi
 	@echo "=== RISCOF version: ==="
 	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof --version"
+	@echo ""
+	@echo "Setup complete! Reference models available:"
+	@echo "  - spike (default): Official RISC-V ISA simulator"
+	@echo "  - rv32sim: kcore software simulator (built)"
+	@echo ""
+	@echo "See $(RISCOF_DIR)/README.md for details"
 
 .PHONY: arch-test-validate
 arch-test-validate: arch-test-setup
 	@echo "=== Validating RISCOF configuration ==="
-	cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof validateyaml --config=config.ini
+	cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof validateyaml --config=config_rtl.ini
 
 .PHONY: arch-test-build
 arch-test-build: build-verilator
@@ -795,34 +800,77 @@ arch-test-build: build-verilator
 arch-test-rv32i: arch-test-setup arch-test-build
 	@echo "=== Running RV32I architectural tests ==="
 	@mkdir -p $(RISCOF_WORK)
-	@bash -c "cd $(RISCOF_DIR) && timeout 1800 bash -c '$(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/I --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work'"
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config_rtl.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/I --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
 	@echo "=== RV32I tests complete. Report: $(RISCOF_WORK)/report.html ==="
 
 .PHONY: arch-test-rv32m
 arch-test-rv32m: arch-test-setup arch-test-build
 	@echo "=== Running RV32M (Multiply/Divide) architectural tests ==="
 	@mkdir -p $(RISCOF_WORK)
-	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/M --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work"
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config_rtl.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/M --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
 	@echo "=== RV32M tests complete. Report: $(RISCOF_WORK)/report.html ==="
 
 .PHONY: arch-test-rv32a
 arch-test-rv32a: arch-test-setup arch-test-build
 	@echo "=== Running RV32A (Atomics) architectural tests ==="
 	@mkdir -p $(RISCOF_WORK)
-	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/A --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work"
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config_rtl.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/A --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
 	@echo "=== RV32A tests complete. Report: $(RISCOF_WORK)/report.html ==="
 
 .PHONY: arch-test-rv32zicsr
 arch-test-rv32zicsr: arch-test-setup arch-test-build
 	@echo "=== Running RV32 Zicsr (CSR) architectural tests ==="
 	@mkdir -p $(RISCOF_WORK)
-	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/privilege --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work"
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof $(RISCOF_DEBUG) run --config=config_rtl.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/privilege --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
 	@echo "=== RV32 Zicsr tests complete. Report: $(RISCOF_WORK)/report.html ==="
 
 .PHONY: arch-test-all
-arch-test-all: arch-test-rv32i arch-test-rv32m arch-test-rv32a arch-test-rv32zicsr
+arch-test-all: arch-test-rv32i arch-test-rv32m arch-test-rv32a arch-test-rv32zicsr arch-test-sim
 	@echo "=== All architectural tests complete ==="
 	@echo "View report: firefox $(RISCOF_WORK)/report.html"
+# ============================================================================
+# rv32sim Validation Tests (DUT=rv32sim, REF=spike)
+# ============================================================================
+
+.PHONY: arch-test-sim
+arch-test-sim: arch-test-setup
+	@echo "========================================================================"
+	@echo "rv32sim Architectural Validation (DUT=rv32sim, REF=spike)"
+	@echo "========================================================================"
+	@if [ ! -f "$(BUILD_DIR)/rv32sim" ]; then \
+		echo "Building rv32sim..."; \
+		$(MAKE) -C sim || { echo "Error: Failed to build rv32sim"; exit 1; }; \
+	fi
+	@if [ ! -f "$(RISCOF_DIR)/config_sim.ini" ]; then \
+		echo "Error: config_sim.ini not found"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "=== Running RV32I tests with rv32sim ==="
+	@mkdir -p $(RISCOF_WORK)
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof run --config=config_sim.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/I --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
+	@echo "=== RV32I tests complete ==="
+	@echo ""
+	@echo "=== Running RV32M tests with rv32sim ==="
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof run --config=config_sim.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/M --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
+	@echo "=== RV32M tests complete ==="
+	@echo ""
+	@echo "=== Running RV32A tests with rv32sim ==="
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof run --config=config_sim.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/A --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
+	@echo "=== RV32A tests complete ==="
+	@echo ""
+	@echo "=== Running RV32 Zicsr tests with rv32sim ==="
+	@bash -c "cd $(RISCOF_DIR) && $(RISCOF_ACTIVATE) && riscof run --config=config_sim.ini --suite=../riscv-arch-test/riscv-test-suite/rv32i_m/privilege --env=../riscv-arch-test/riscv-test-suite/env --work-dir=riscof_work --no-browser"
+	@echo "=== RV32 Zicsr tests complete ==="
+	@echo ""
+	@echo "========================================================================"
+	@echo "rv32sim Validation Complete"
+	@echo "========================================================================"
+	@echo "Report: $(RISCOF_WORK)/report.html"
+	@echo ""
+	@if [ -f "$(RISCOF_WORK)/report.html" ]; then \
+		grep -E "(Passed|Failed)" $(RISCOF_WORK)/report.html | head -5 || true; \
+	fi
 
 .PHONY: arch-test-report
 arch-test-report:
@@ -840,9 +888,7 @@ arch-test-clean:
 	@echo "Cleaning RISCOF work directory and test artifacts..."
 	rm -rf $(RISCOF_WORK)
 	find verif/riscv-arch-test/riscv-test-suite -name "*.elf" -type f -delete 2>/dev/null || true
-	find verif/riscv-arch-test/riscv-test-suite -name "*.bin" -type f -delete 2>/dev/null || true
 	find verif/riscv-arch-test/riscv-test-suite -name "*.signature" -type f -delete 2>/dev/null || true
-	find verif/riscv-arch-test/riscv-test-suite -name "*.symbols" -type f -delete 2>/dev/null || true
 	@echo "RISCOF work directory cleaned."
 
 .PHONY: arch-test-clean-all
@@ -863,6 +909,7 @@ info:
 	@echo "  Toolchain:  $(RISCV_PREFIX)"
 	@echo "  Verilator:  $(VERILATOR)"
 	@echo "  Spike:      $(SPIKE)"
+	@echo "  SW Sim:     $(SW_SIM) (USE_SPIKE=$(USE_SPIKE))"
 	@echo "  RISC-V ISA: $(ARCH)"
 	@echo "  ABI:        $(ABI)"
 	@echo ""
@@ -1112,9 +1159,9 @@ zephyr-venv-setup:
 	@echo "To activate: source $(ZEPHYR_VENV)/bin/activate"
 
 # Pattern rule for running Zephyr tests in RTL simulation
-# Must be defined before generic zephyr-% to take precedence
+# Zephyr targets - validate, build, then run (skip sw dependency)
 .PHONY: zephyr-rtl-%
-zephyr-rtl-%: build-verilator-only
+zephyr-rtl-%: build-verilator
 	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
 		echo "Error: Zephyr sample '$*' not found"; \
 		echo "Expected directory: $(ZEPHYR_SAMPLES)/$*"; \
@@ -1123,8 +1170,8 @@ zephyr-rtl-%: build-verilator-only
 		exit 1; \
 	fi
 	@$(MAKE) zephyr-$*
-	@echo "=== Running Zephyr Sample: $* ==="
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	@echo "=== Running Zephyr Test: $* ==="
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1132,13 +1179,11 @@ zephyr-rtl-%: build-verilator-only
 	fi
 	@if [ "$(TRACE)" = "1" ] && [ -f $(BUILD_DIR)/rtl_trace.txt ]; then \
 		echo "=== Parsing call trace ==="; \
-		python3 sim/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
+		python3 $(SCRIPTS_DIR)/parse_call_trace.py $(BUILD_DIR)/rtl_trace.txt $(SW_ELF) $(RISCV_PREFIX) $(BUILD_DIR)/call_trace_report.txt; \
 		echo "Call trace report: $(BUILD_DIR)/call_trace_report.txt"; \
 	fi
 	@echo "=== Zephyr test complete ==="
 
-# Pattern rule for running Zephyr tests in ISS simulator
-# Must be defined before generic zephyr-% to take precedence
 .PHONY: zephyr-sim-%
 zephyr-sim-%: build-sim
 	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
@@ -1149,12 +1194,13 @@ zephyr-sim-%: build-sim
 		exit 1; \
 	fi
 	@$(MAKE) zephyr-$*
-	@echo "=== Running Zephyr Sample in Simulator: $* ==="
-	$(SIM_BIN) $(SW_ELF) | tee $(BUILD_DIR)/spike_output.log
-	@echo "=== Zephyr simulator test complete ==="
+	@echo "=== Running Zephyr Test in Simulator: $* ==="
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	else \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	fi
 
-# Pattern rule for comparing Zephyr RTL vs Spike traces
-# Must be defined before generic zephyr-% to take precedence
 .PHONY: zephyr-compare-%
 zephyr-compare-%:
 	@if [ ! -d $(ZEPHYR_SAMPLES)/$* ]; then \
@@ -1164,14 +1210,15 @@ zephyr-compare-%:
 		ls -1d $(ZEPHYR_SAMPLES)/*/ 2>/dev/null | xargs -n1 basename | sed 's/^/  /' || echo "  (none found)"; \
 		exit 1; \
 	fi
+	@$(MAKE) zephyr-$*
 	@echo "=== Running and comparing Zephyr test: $* ==="
 	@$(MAKE) zephyr-rtl-$* TRACE=1
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF); \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(SW_ELF); \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
-	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt
+	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
 
 # Pattern rule for Zephyr tests: zephyr-<sample> builds rtos/zephyr/samples/<sample>
 # Output to standard test.elf files for consistency
@@ -1264,13 +1311,12 @@ check-nuttx:
 		exit 1; \
 	fi
 
-# Pattern rule for NuttX RTL simulation: nuttx-rtl-<sample>
+# NuttX targets - build, then run (skip sw dependency)
 .PHONY: nuttx-rtl-%
-nuttx-rtl-%: build-verilator-only
+nuttx-rtl-%: build-verilator
 	@$(MAKE) nuttx-$*
 	@echo "=== Running NuttX sample in RTL simulation: $* ==="
-	@echo "nuttx-rtl-$*" > $(TEST_MARKER)
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES),+MAX_CYCLES=0) | tee $(BUILD_DIR)/rtl_output.log
+	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1278,37 +1324,37 @@ nuttx-rtl-%: build-verilator-only
 	fi
 	@echo "=== NuttX RTL simulation completed ==="
 
-# Pattern rule for NuttX C++ simulation: nuttx-sim-<sample>
 .PHONY: nuttx-sim-%
 nuttx-sim-%: build-sim
 	@$(MAKE) nuttx-$*
-	@echo "=== Running NuttX sample in C++ simulation: $* ==="
-	@echo "nuttx-sim-$*" > $(TEST_MARKER)
-	$(SIM_EXEC) $(SW_ELF) $(BUILD_DIR)/spike_trace.txt
-	@echo "=== NuttX C++ simulation completed ==="
+	@echo "=== Running NuttX Test: $* ==="
+	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	else \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+	fi
 
-# Pattern rule for NuttX trace comparison: nuttx-compare-<sample>
-# Compares RTL execution with Spike ISA simulator to identify core bugs
 .PHONY: nuttx-compare-%
-nuttx-compare-%: build-verilator-only
+nuttx-compare-%:
+	@$(MAKE) nuttx-$*
 	@echo "=== Comparing NuttX test execution: RTL vs Spike ==="
 	@echo "Building and running RTL simulation with trace..."
 	@$(MAKE) nuttx-rtl-$* TRACE=1
 	@echo ""
 	@echo "Running Spike ISA simulator with the same binary..."
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF); \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SPIKE) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/spike_trace.txt -m0x80000000:0x200000 $(SW_ELF); \
+		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 	@echo ""
 	@echo "=== Comparing traces: RTL vs Spike ==="
-	@if [ -f $(SIM_DIR)/trace_compare.py ]; then \
-		python3 $(SIM_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/spike_trace.txt; \
+	@if [ -f $(SCRIPTS_DIR)/trace_compare.py ]; then \
+		python3 $(SCRIPTS_DIR)/trace_compare.py $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt; \
 	else \
 		echo "Note: trace_compare.py not found. Manual comparison:"; \
 		echo "RTL trace:   $(BUILD_DIR)/rtl_trace.txt"; \
-		echo "Spike trace: $(BUILD_DIR)/spike_trace.txt"; \
+		echo "Spike trace: $(BUILD_DIR)/sim_trace.txt"; \
 	fi
 	@echo "=== NuttX comparison completed ==="
 

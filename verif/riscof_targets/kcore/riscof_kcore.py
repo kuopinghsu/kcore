@@ -139,18 +139,20 @@ class kcore(pluginTemplate):
           cmd = self.compile_cmd.format(testentry['isa'].lower(), self.xlen, test, elf, compile_macros)
 
           if self.target_run:
-            # Extract signature addresses from ELF using nm
-            nm_cmd = self.riscv_prefix + 'nm {0} | grep -E "begin_signature|end_signature" > {1}.symbols; '.format(elf, elf)
-
             # Run on Verilator with signature extraction using ELF file directly
-            # The signature extraction script will read the .symbols file and pass addresses to simulator
+            # The simulator will automatically extract begin_signature and end_signature from ELF
             # Pass RISCOF_DEBUG environment variable if set
             debug_prefix = ''
+            trace_arg = ''
             if os.environ.get('RISCOF_DEBUG', '0') == '1':
                 debug_prefix = 'export RISCOF_DEBUG=1; '
+                trace_arg = '+TRACE'
 
-            simcmd = nm_cmd + debug_prefix + 'python3 {0}/extract_signature.py {1} {2}'.format(
-                self.pluginpath, elf, sig_file)
+            # Run simulation with signature extraction
+            # +signature= tells the simulator to write signature to file
+            # +signature-granularity=4 specifies 4-byte (32-bit) words
+            simcmd = debug_prefix + '{0} +PROGRAM={1} +MAX_CYCLES=100000 +signature={2} +signature-granularity=4 {3} > {2}.log 2>&1'.format(
+                self.dut_exe, elf, sig_file, trace_arg)
           else:
             simcmd = 'echo "NO RUN"'
 

@@ -174,7 +174,7 @@ To port a new RTOS to kcore:
 
 - **Enable verbose output**: Add `-DDEBUG` to compilation flags
 - **Check stack usage**: Use `-fstack-usage` compiler flag
-- **Analyze traces**: Use `sim/parse_call_trace.py` for call profiling
+- **Analyze traces**: Use `scripts/parse_call_trace.py` for call profiling
 - **Memory traces**: Use `make memtrace-<test>` to verify memory accesses
 - **RTL waveforms**: Run with `make rtl-wave` to generate VCD files
 

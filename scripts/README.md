@@ -69,7 +69,7 @@ The `trace_compare.py` script compares RTL and Spike traces:
 ### Usage
 
 ```bash
-python3 scripts/trace_compare.py build/rtl_trace.txt build/spike_trace.txt
+python3 scripts/trace_compare.py build/rtl_trace.txt build/sim_trace.txt
 ```
 
 ### Example Output

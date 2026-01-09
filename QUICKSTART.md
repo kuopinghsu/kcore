@@ -6,7 +6,11 @@ Get started with the RV32IMA processor in 5 minutes.
 
 ## Prerequisites
 
-**Required Tools**: RISC-V GCC toolchain, Verilator v5.0+, Spike simulator, Python 3
+**Required Tools**: RISC-V GCC toolchain, Verilator v5.0+, Python 3
+
+**Optional Tools**: 
+- Spike ISA simulator (default software simulator, `USE_SPIKE=1`)
+- Built-in rv32sim can be used instead (`USE_SPIKE=0`)
 
 **Setup**: Edit `env.config` to configure tool paths, then run:
 ```bash
@@ -40,7 +44,8 @@ make clean             # Clean build artifacts
 make rtl-<test>        # Run specific test (simple, hello, full, interrupt, uart, dhry)
 make rtl WAVE=fst      # Run with waveform (FST format)
 make wave              # View waveforms in GTKWave
-make compare           # Compare RTL vs Spike traces
+make compare           # Compare RTL vs software simulator (default: Spike)
+make compare USE_SPIKE=0  # Compare using rv32sim instead
 make arch-test-rv32i   # Run architectural tests (RV32I: 38/38 pass)
 make arch-test-rv32m   # Run architectural tests (RV32M: 8/8 pass)
 ```
@@ -57,6 +62,19 @@ make arch-test-rv32m   # Run architectural tests (RV32M: 8/8 pass)
 Details: [PROJECT_STATUS.md](PROJECT_STATUS.md)
 
 ## Debugging
+
+**Interactive GDB Debugging** (rv32sim):
+```bash
+# Terminal 1
+./build/rv32sim --gdb --gdb-port=3333 build/test.elf
+
+# Terminal 2
+riscv32-unknown-elf-gdb build/test.elf
+(gdb) target remote localhost:3333
+(gdb) break main
+(gdb) watch myvar    # Breakpoint on write
+(gdb) continue
+```
 
 **Enable waveforms**:
 ```bash

@@ -36,7 +36,8 @@ static uint32_t parse_hex(const char *str, int len) {
 }
 
 static void encode_hex(char *buf, uint32_t value, int bytes) {
-    for (int i = bytes - 1; i >= 0; i--) {
+    // Encode in little-endian byte order (LSB first) for RISC-V
+    for (int i = 0; i < bytes; i++) {
         uint8_t byte = (value >> (i * 8)) & 0xFF;
         *buf++ = int_to_hex(byte >> 4);
         *buf++ = int_to_hex(byte & 0xF);
@@ -325,17 +326,29 @@ static void handle_breakpoint(gdb_context_t *ctx, bool insert) {
 
     int type = parse_hex(packet, comma1 - packet);
     uint32_t addr = parse_hex(comma1 + 1, comma2 - comma1 - 1);
+    uint32_t len = parse_hex(comma2 + 1, strlen(comma2 + 1));
 
-    if (type != 0 && type != 1) { // Only software and hardware breakpoints
+    int result = 0;
+
+    // Handle breakpoints (type 0, 1) and watchpoints (type 2, 3, 4)
+    if (type == 0 || type == 1) {
+        // Software (0) and hardware (1) breakpoints
+        if (insert) {
+            result = gdb_stub_add_breakpoint(ctx, addr);
+        } else {
+            result = gdb_stub_remove_breakpoint(ctx, addr);
+        }
+    } else if (type >= 2 && type <= 4) {
+        // Watchpoints: 2=write, 3=read, 4=access
+        if (insert) {
+            result = gdb_stub_add_watchpoint(ctx, addr, len, (watchpoint_type_t)type);
+        } else {
+            result = gdb_stub_remove_watchpoint(ctx, addr, len, (watchpoint_type_t)type);
+        }
+    } else {
+        // Unsupported type
         send_packet(&ctx->stub, "");
         return;
-    }
-
-    int result;
-    if (insert) {
-        result = gdb_stub_add_breakpoint(ctx, addr);
-    } else {
-        result = gdb_stub_remove_breakpoint(ctx, addr);
     }
 
     send_packet(&ctx->stub, result == 0 ? "OK" : "E01");
@@ -465,6 +478,86 @@ bool gdb_stub_check_breakpoint(gdb_context_t *ctx, uint32_t pc) {
     return false;
 }
 
+// Watchpoint management
+int gdb_stub_add_watchpoint(gdb_context_t *ctx, uint32_t addr, uint32_t len, watchpoint_type_t type) {
+    if (ctx->watchpoint_count >= MAX_WATCHPOINTS) {
+        return -1;
+    }
+
+    // Check if already exists
+    for (int i = 0; i < ctx->watchpoint_count; i++) {
+        if (ctx->watchpoints[i].addr == addr &&
+            ctx->watchpoints[i].len == len &&
+            ctx->watchpoints[i].type == type) {
+            ctx->watchpoints[i].enabled = true;
+            return 0;
+        }
+    }
+
+    ctx->watchpoints[ctx->watchpoint_count].addr = addr;
+    ctx->watchpoints[ctx->watchpoint_count].len = len;
+    ctx->watchpoints[ctx->watchpoint_count].type = type;
+    ctx->watchpoints[ctx->watchpoint_count].enabled = true;
+    ctx->watchpoint_count++;
+    return 0;
+}
+
+int gdb_stub_remove_watchpoint(gdb_context_t *ctx, uint32_t addr, uint32_t len, watchpoint_type_t type) {
+    for (int i = 0; i < ctx->watchpoint_count; i++) {
+        if (ctx->watchpoints[i].addr == addr &&
+            ctx->watchpoints[i].len == len &&
+            ctx->watchpoints[i].type == type) {
+            ctx->watchpoints[i].enabled = false;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+void gdb_stub_clear_watchpoints(gdb_context_t *ctx) {
+    ctx->watchpoint_count = 0;
+}
+
+// Check if memory read triggers a watchpoint
+bool gdb_stub_check_watchpoint_read(gdb_context_t *ctx, uint32_t addr, uint32_t len) {
+    for (int i = 0; i < ctx->watchpoint_count; i++) {
+        if (!ctx->watchpoints[i].enabled) continue;
+
+        watchpoint_t *wp = &ctx->watchpoints[i];
+        if (wp->type != WATCHPOINT_READ && wp->type != WATCHPOINT_ACCESS) continue;
+
+        // Check if ranges overlap
+        uint32_t wp_end = wp->addr + wp->len;
+        uint32_t access_end = addr + len;
+
+        if (addr < wp_end && access_end > wp->addr) {
+            ctx->last_watchpoint_addr = wp->addr;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Check if memory write triggers a watchpoint
+bool gdb_stub_check_watchpoint_write(gdb_context_t *ctx, uint32_t addr, uint32_t len) {
+    for (int i = 0; i < ctx->watchpoint_count; i++) {
+        if (!ctx->watchpoints[i].enabled) continue;
+
+        watchpoint_t *wp = &ctx->watchpoints[i];
+        if (wp->type != WATCHPOINT_WRITE && wp->type != WATCHPOINT_ACCESS) continue;
+
+        // Check if ranges overlap
+        uint32_t wp_end = wp->addr + wp->len;
+        uint32_t access_end = addr + len;
+
+        if (addr < wp_end && access_end > wp->addr) {
+            ctx->last_watchpoint_addr = wp->addr;
+            return true;
+        }
+    }
+    return false;
+}
+
 void gdb_stub_close(gdb_context_t *ctx) {
     if (ctx->stub.client_fd >= 0) {
         close(ctx->stub.client_fd);
@@ -476,4 +569,10 @@ void gdb_stub_close(gdb_context_t *ctx) {
     }
     ctx->stub.connected = false;
     ctx->stub.enabled = false;
+}
+
+int gdb_stub_send_stop_signal(gdb_context_t *ctx, int signal) {
+    char response[32];
+    snprintf(response, sizeof(response), "S%02x", signal & 0xFF);
+    return send_packet(&ctx->stub, response);
 }
