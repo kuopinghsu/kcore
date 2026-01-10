@@ -17,14 +17,14 @@ int puts(const char *s) {
     if (!s) {
         s = "(null)";
     }
-    
+
     // Calculate string length
     size_t len = 0;
     const char *ptr = s;
     while (*ptr++) {
         len++;
     }
-    
+
     // Write string
     if (len > 0) {
         int result = _write(1, s, len);
@@ -32,13 +32,13 @@ int puts(const char *s) {
             return EOF;
         }
     }
-    
+
     // Write newline
     int result = _write(1, "\n", 1);
     if (result < 0) {
         return EOF;
     }
-    
+
     return 0;  // Success (non-negative value)
 }
 
@@ -46,25 +46,25 @@ int puts(const char *s) {
 int fputs(const char *s, FILE *stream) {
     // Ignore stream parameter in bare-metal
     (void)stream;
-    
+
     if (!s) {
         return EOF;
     }
-    
+
     // Calculate string length
     size_t len = 0;
     const char *ptr = s;
     while (*ptr++) {
         len++;
     }
-    
+
     if (len == 0) {
         return 0;
     }
-    
+
     // Write string (no newline for fputs)
     int result = _write(1, s, len);
-    
+
     return (result == (int)len) ? 0 : EOF;
 }
 

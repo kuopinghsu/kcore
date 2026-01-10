@@ -139,7 +139,7 @@ int main(void) {
     print("  (Send ABC followed by newline from testbench)\n\n");
 
     uint32_t rx_chars = 0;
-    uint32_t timeout = 500000;  // Timeout cycles
+    uint32_t timeout = 1000;  // Timeout cycles
     int done = 0;
 
     while (!done && timeout > 0) {
@@ -162,7 +162,7 @@ int main(void) {
             uart_putc((char)c);
 
             rx_chars++;
-            timeout = 500000;  // Reset timeout on successful RX
+            timeout = 1000;  // Reset timeout on successful RX
 
             // Stop on newline or after 20 characters
             if (c == '\n' || rx_chars >= 20) {

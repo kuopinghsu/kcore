@@ -10,7 +10,7 @@ int main(void) {
     printf("\n========================================\n");
     printf("  Printf/Puts/Putc Comprehensive Test\n");
     printf("========================================\n\n");
-    
+
     // Test puts and putc functions
     printf("=== Testing puts/putc Functions ===\n");
     puts("puts: This is a line with automatic newline");
@@ -20,13 +20,13 @@ int main(void) {
     putchar('\n');
     putc('Y', stdout);
     putc('\n', stdout);
-    
+
     // Character test
     printf("\n=== Character Tests ===\n");
     printf("Single char: %c\n", 'A');
     printf("Multiple: %c %c %c\n", 'X', 'Y', 'Z');
     printf("Escape sequences: '\\n' '\\t' '\\r'\n");
-    
+
     // String tests
     printf("\n=== String Tests ===\n");
     printf("Hello: %s\n", "World");
@@ -35,7 +35,7 @@ int main(void) {
     printf("Width left: '%-10s'\n", "test");
     printf("Precision: '%.3s' from 'Testing'\n", "Testing");
     printf("Width+Prec: '%10.3s'\n", "Testing");
-    
+
     // Integer tests
     printf("\n=== Integer Tests ===\n");
     printf("Decimal: %d, %i\n", 42, -42);
@@ -47,7 +47,7 @@ int main(void) {
     printf("Zero: %d\n", 0);
     printf("Max int: %d\n", 2147483647);
     printf("Min int: %ld\n", (long)-2147483648);
-    
+
     // Width and precision
     printf("\n=== Width/Precision Tests ===\n");
     printf("Width 5 right: '%5d'\n", 42);
@@ -58,14 +58,14 @@ int main(void) {
     printf("Plus sign: '%+d' '%+d'\n", 42, -42);
     printf("Space: '% d' '% d'\n", 42, -42);
     printf("Precision: '%.5d'\n", 42);
-    
+
     // Alternate form
     printf("\n=== Alternate Form Tests ===\n");
     printf("Hex with #: '%#x' '%#X'\n", 255, 255);
     printf("Hex zero: '%#x'\n", 0);
     printf("Octal with #: '%#o'\n", 64);
     printf("Octal zero: '%#o'\n", 0);
-    
+
     // Length modifiers
     printf("\n=== Length Modifier Tests ===\n");
     printf("char (hh): %hhd\n", (signed char)-128);
@@ -76,14 +76,14 @@ int main(void) {
     printf("unsigned short: %hu\n", (unsigned short)65535);
     printf("unsigned long: %lu\n", (unsigned long)4294967295UL);
     printf("unsigned ll hex: %llx\n", (unsigned long long)0xDEADBEEFCAFEBABEULL);
-    
+
     // Edge cases
     printf("\n=== Edge Cases ===\n");
     printf("Percent sign: %%\n");
     printf("Multiple %%: %%%% = %%%%\n");
     printf("Empty string: '%s'\n", "");
     printf("Very long string: '%s'\n", "This is a somewhat longer string to test buffer handling in printf implementation");
-    
+
     // Combined formatting
     printf("\n=== Combined Format Tests ===\n");
     printf("Mix: %d %s %x %c\n", 42, "test", 255, 'A');
@@ -93,7 +93,7 @@ int main(void) {
     printf("  %-10s | %5d | %#8x\n", "Alpha", 100, 100);
     printf("  %-10s | %5d | %#8x\n", "Beta", 200, 200);
     printf("  %-10s | %5d | %#8x\n", "Gamma", 300, 300);
-    
+
 #ifndef PRINTF_DISABLE_FLOAT
     // Float tests
     printf("\n=== Float/Double Tests ===\n");
@@ -111,27 +111,27 @@ int main(void) {
     printf("\n=== Float Support ===\n");
     printf("DISABLED (compile without -DPRINTF_DISABLE_FLOAT)\n");
 #endif
-    
+
     // sprintf tests
     printf("\n=== sprintf/snprintf Tests ===\n");
     char buffer[64];
     sprintf(buffer, "sprintf: %d + %d = %d", 10, 20, 30);
     printf("Result: %s\n", buffer);
-    
+
     snprintf(buffer, sizeof(buffer), "snprintf: %s %d", "test", 123);
     printf("Result: %s\n", buffer);
-    
+
     // Test truncation
     snprintf(buffer, 10, "This is a very long string");
     printf("Truncated (10 chars): '%s'\n", buffer);
-    
+
     // Stress test with many arguments
     printf("\n=== Stress Test ===\n");
     printf("Many args: %d %d %d %d %d %d %d %d\n", 1, 2, 3, 4, 5, 6, 7, 8);
-    
+
     printf("\n========================================\n");
     printf("  All Tests Complete - %d Total\n", 50);
     printf("========================================\n\n");
-    
+
     return 0;
 }

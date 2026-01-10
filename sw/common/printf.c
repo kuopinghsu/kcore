@@ -1,6 +1,6 @@
 /*
  * Lightweight printf implementation for embedded systems
- * 
+ *
  * Supports:
  * - Integer types: char, short, int, long, long long (signed/unsigned)
  * - Floating point: float, double (optional, controlled by PRINTF_DISABLE_FLOAT)
@@ -8,7 +8,7 @@
  * - Length modifiers: hh, h, l, ll, z, t
  * - Width and precision
  * - Flags: -, +, 0, space, #
- * 
+ *
  * To disable floating point support (reduce code size):
  *   Define PRINTF_DISABLE_FLOAT at compile time
  */
@@ -99,25 +99,25 @@ static void printf_putstr(const char *str) {
 static void printf_putstr_formatted(const char *str, const format_spec_t *spec) {
     size_t len = 0;
     const char *s = str;
-    
+
     // Calculate string length up to precision
     while (*s && (spec->precision < 0 || len < (size_t)spec->precision)) {
         len++;
         s++;
     }
-    
+
     // Left padding
     if (!(spec->flags & FLAG_LEFT_JUSTIFY) && spec->width > (int)len) {
         for (int i = 0; i < spec->width - (int)len; i++) {
             printf_putchar(' ');
         }
     }
-    
+
     // String content
     for (size_t i = 0; i < len; i++) {
         printf_putchar(str[i]);
     }
-    
+
     // Right padding
     if ((spec->flags & FLAG_LEFT_JUSTIFY) && spec->width > (int)len) {
         for (int i = 0; i < spec->width - (int)len; i++) {
@@ -131,17 +131,17 @@ static char* uint_to_str(uint64_t value, char *buf, int base, bool uppercase) {
     const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
     char *ptr = buf + PRINTF_BUFFER_SIZE - 1;
     *ptr = '\0';
-    
+
     if (value == 0) {
         *(--ptr) = '0';
         return ptr;
     }
-    
+
     while (value > 0) {
         *(--ptr) = digits[value % base];
         value /= base;
     }
-    
+
     return ptr;
 }
 
@@ -150,7 +150,7 @@ static void printf_print_int(int64_t value, const format_spec_t *spec, int base,
     char buffer[PRINTF_BUFFER_SIZE];
     char sign = 0;
     uint64_t uvalue;
-    
+
     // Handle sign
     if (spec->specifier == 'd' || spec->specifier == 'i') {
         if (value < 0) {
@@ -167,11 +167,11 @@ static void printf_print_int(int64_t value, const format_spec_t *spec, int base,
     } else {
         uvalue = (uint64_t)value;
     }
-    
+
     // Convert to string
     char *str = uint_to_str(uvalue, buffer, base, uppercase);
     size_t len = buffer + PRINTF_BUFFER_SIZE - 1 - str;
-    
+
     // Add prefix for alternate form
     int prefix_len = 0;
     if (spec->flags & FLAG_ALTERNATE) {
@@ -181,28 +181,28 @@ static void printf_print_int(int64_t value, const format_spec_t *spec, int base,
             prefix_len = 1; // "0"
         }
     }
-    
+
     // Calculate padding
     int sign_len = sign ? 1 : 0;
     int num_len = len + sign_len + prefix_len;
     int precision_pad = 0;
-    
+
     if (spec->precision >= 0 && spec->precision > (int)len) {
         precision_pad = spec->precision - len;
     }
-    
+
     num_len += precision_pad;
-    
+
     // Print with padding
     char pad_char = (spec->flags & FLAG_ZERO_PAD) && spec->precision < 0 ? '0' : ' ';
-    
+
     // Left padding (space)
     if (!(spec->flags & FLAG_LEFT_JUSTIFY) && pad_char == ' ' && spec->width > num_len) {
         for (int i = 0; i < spec->width - num_len; i++) {
             printf_putchar(' ');
         }
     }
-    
+
     // Sign and prefix
     if (sign) printf_putchar(sign);
     if (spec->flags & FLAG_ALTERNATE) {
@@ -213,22 +213,22 @@ static void printf_print_int(int64_t value, const format_spec_t *spec, int base,
             printf_putchar('0');
         }
     }
-    
+
     // Left padding (zero)
     if (!(spec->flags & FLAG_LEFT_JUSTIFY) && pad_char == '0' && spec->width > num_len) {
         for (int i = 0; i < spec->width - num_len; i++) {
             printf_putchar('0');
         }
     }
-    
+
     // Precision padding
     for (int i = 0; i < precision_pad; i++) {
         printf_putchar('0');
     }
-    
+
     // Number
     printf_putstr(str);
-    
+
     // Right padding
     if ((spec->flags & FLAG_LEFT_JUSTIFY) && spec->width > num_len) {
         for (int i = 0; i < spec->width - num_len; i++) {
@@ -244,27 +244,27 @@ static void printf_print_float(double value, const format_spec_t *spec) {
     char buffer[PRINTF_BUFFER_SIZE];
     int precision = spec->precision < 0 ? 6 : spec->precision;
     bool negative = false;
-    
+
     // Handle special cases
     if (value != value) { // NaN
         printf_putstr_formatted("nan", spec);
         return;
     }
-    
+
     if (value < 0) {
         negative = true;
         value = -value;
     }
-    
+
     // Check for infinity
     if (value > 1e38) {
         printf_putstr_formatted(negative ? "-inf" : "inf", spec);
         return;
     }
-    
+
     // Build the string
     char *ptr = buffer;
-    
+
     // Sign
     if (negative) {
         *ptr++ = '-';
@@ -273,22 +273,22 @@ static void printf_print_float(double value, const format_spec_t *spec) {
     } else if (spec->flags & FLAG_SPACE) {
         *ptr++ = ' ';
     }
-    
+
     // Integer part
     uint64_t int_part = (uint64_t)value;
     double frac_part = value - (double)int_part;
-    
+
     char temp[PRINTF_BUFFER_SIZE];
     char *int_str = uint_to_str(int_part, temp, 10, false);
     while (*int_str) {
         *ptr++ = *int_str++;
     }
-    
+
     // Decimal point
     if (precision > 0 || (spec->flags & FLAG_ALTERNATE)) {
         *ptr++ = '.';
     }
-    
+
     // Fractional part
     for (int i = 0; i < precision; i++) {
         frac_part *= 10;
@@ -296,7 +296,7 @@ static void printf_print_float(double value, const format_spec_t *spec) {
         *ptr++ = '0' + digit;
         frac_part -= digit;
     }
-    
+
     // Round last digit
     if (frac_part >= 0.5 && precision > 0) {
         char *round_ptr = ptr - 1;
@@ -313,9 +313,9 @@ static void printf_print_float(double value, const format_spec_t *spec) {
             round_ptr--;
         }
     }
-    
+
     *ptr = '\0';
-    
+
     // Output with width formatting
     size_t len = ptr - buffer;
     if (!(spec->flags & FLAG_LEFT_JUSTIFY) && spec->width > (int)len) {
@@ -324,9 +324,9 @@ static void printf_print_float(double value, const format_spec_t *spec) {
             printf_putchar(pad);
         }
     }
-    
+
     printf_putstr(buffer);
-    
+
     if ((spec->flags & FLAG_LEFT_JUSTIFY) && spec->width > (int)len) {
         for (int i = 0; i < spec->width - (int)len; i++) {
             printf_putchar(' ');
@@ -343,7 +343,7 @@ static const char* parse_format_spec(const char *format, format_spec_t *spec, va
     spec->precision = -1;
     spec->length = LENGTH_NONE;
     spec->specifier = 0;
-    
+
     // Parse flags
     bool parsing_flags = true;
     while (parsing_flags) {
@@ -356,7 +356,7 @@ static const char* parse_format_spec(const char *format, format_spec_t *spec, va
             default: parsing_flags = false; break;
         }
     }
-    
+
     // Parse width
     if (*format == '*') {
         spec->width = va_arg(*args, int);
@@ -371,7 +371,7 @@ static const char* parse_format_spec(const char *format, format_spec_t *spec, va
             format++;
         }
     }
-    
+
     // Parse precision
     if (*format == '.') {
         format++;
@@ -386,7 +386,7 @@ static const char* parse_format_spec(const char *format, format_spec_t *spec, va
             }
         }
     }
-    
+
     // Parse length modifier
     if (*format == 'h') {
         format++;
@@ -411,22 +411,22 @@ static const char* parse_format_spec(const char *format, format_spec_t *spec, va
         spec->length = LENGTH_T;
         format++;
     }
-    
+
     // Parse specifier
     spec->specifier = *format;
     if (*format) format++;
-    
+
     return format;
 }
 
 // Main printf implementation
 int vprintf(const char *format, va_list args) {
     int count = 0;
-    
+
     while (*format) {
         if (*format == '%') {
             format++;
-            
+
             // Handle %%
             if (*format == '%') {
                 printf_putchar('%');
@@ -434,11 +434,11 @@ int vprintf(const char *format, va_list args) {
                 count++;
                 continue;
             }
-            
+
             // Parse format specification
             format_spec_t spec;
             format = parse_format_spec(format, &spec, &args);
-            
+
             // Process based on specifier
             switch (spec.specifier) {
                 case 'c': {
@@ -447,14 +447,14 @@ int vprintf(const char *format, va_list args) {
                     count++;
                     break;
                 }
-                
+
                 case 's': {
                     const char *s = va_arg(args, const char*);
                     if (!s) s = "(null)";
                     printf_putstr_formatted(s, &spec);
                     break;
                 }
-                
+
                 case 'd':
                 case 'i': {
                     int64_t value;
@@ -470,7 +470,7 @@ int vprintf(const char *format, va_list args) {
                     printf_print_int(value, &spec, 10, false);
                     break;
                 }
-                
+
                 case 'u': {
                     uint64_t value;
                     switch (spec.length) {
@@ -485,7 +485,7 @@ int vprintf(const char *format, va_list args) {
                     printf_print_int(value, &spec, 10, false);
                     break;
                 }
-                
+
                 case 'x':
                 case 'X': {
                     uint64_t value;
@@ -501,7 +501,7 @@ int vprintf(const char *format, va_list args) {
                     printf_print_int(value, &spec, 16, spec.specifier == 'X');
                     break;
                 }
-                
+
                 case 'o': {
                     uint64_t value;
                     switch (spec.length) {
@@ -516,14 +516,14 @@ int vprintf(const char *format, va_list args) {
                     printf_print_int(value, &spec, 8, false);
                     break;
                 }
-                
+
                 case 'p': {
                     void *ptr = va_arg(args, void*);
                     spec.flags |= FLAG_ALTERNATE;
                     printf_print_int((uint64_t)(uintptr_t)ptr, &spec, 16, false);
                     break;
                 }
-                
+
 #ifndef PRINTF_DISABLE_FLOAT
                 case 'f':
                 case 'F': {
@@ -531,7 +531,7 @@ int vprintf(const char *format, va_list args) {
                     printf_print_float(value, &spec);
                     break;
                 }
-                
+
                 case 'e':
                 case 'E':
                 case 'g':
@@ -543,7 +543,7 @@ int vprintf(const char *format, va_list args) {
                     }
                     break;
 #endif
-                
+
                 default:
                     // Unknown specifier, just print it
                     printf_putchar('%');
@@ -556,7 +556,7 @@ int vprintf(const char *format, va_list args) {
             count++;
         }
     }
-    
+
     printf_flush();
     return count;
 }
@@ -575,28 +575,28 @@ static int vsprintf_impl(char *str, size_t size, const char *format, va_list arg
     char *saved_dest = sprintf_dest;
     size_t saved_pos = sprintf_pos;
     size_t saved_max = sprintf_max;
-    
+
     sprintf_dest = str;
     sprintf_pos = 0;
     sprintf_max = size;
-    
+
     vprintf(format, args);
-    
+
     // Get result before restoring
     int result = sprintf_pos;
-    
+
     // Restore state
     sprintf_dest = saved_dest;
     sprintf_pos = saved_pos;
     sprintf_max = saved_max;
-    
+
     // Null terminate
     if (result < (int)size) {
         str[result] = '\0';
     } else if (size > 0) {
         str[size - 1] = '\0';
     }
-    
+
     return result;
 }
 

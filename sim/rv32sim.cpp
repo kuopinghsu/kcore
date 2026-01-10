@@ -185,6 +185,16 @@ RV32Simulator::RV32Simulator(uint32_t base, uint32_t size)
     csr_mcause = 0;
     csr_mtval = 0;
     csr_mip = 0;
+
+    // Initialize counters
+    csr_mcycle = 0;
+    csr_minstret = 0;
+
+    // Initialize machine information registers
+    csr_mvendorid = 0;  // No vendor ID
+    csr_marchid = 0;    // No architecture ID
+    csr_mimpid = 0;     // No implementation ID
+    csr_mhartid = 0;    // Hart ID = 0 (single core)
 }
 
 RV32Simulator::~RV32Simulator() {
@@ -327,6 +337,40 @@ uint32_t RV32Simulator::read_csr(uint32_t csr) {
         return csr_mtval;
     case CSR_MIP:
         return csr_mip;
+
+    // Machine-mode counters (writable)
+    case CSR_MCYCLE:
+        return (uint32_t)(csr_mcycle & 0xFFFFFFFF);  // Lower 32 bits
+    case CSR_MCYCLEH:
+        return (uint32_t)(csr_mcycle >> 32);  // Upper 32 bits
+    case CSR_MINSTRET:
+        return (uint32_t)(csr_minstret & 0xFFFFFFFF);
+    case CSR_MINSTRETH:
+        return (uint32_t)(csr_minstret >> 32);
+
+    // User-level counters (read-only, aliased to machine-mode counters)
+    case CSR_CYCLE:
+        return (uint32_t)(csr_mcycle & 0xFFFFFFFF);
+    case CSR_CYCLEH:
+        return (uint32_t)(csr_mcycle >> 32);
+    case CSR_TIME:
+        return (uint32_t)(csr_mcycle & 0xFFFFFFFF);  // Alias to mcycle
+    case CSR_TIMEH:
+        return (uint32_t)(csr_mcycle >> 32);
+    case CSR_INSTRET:
+        return (uint32_t)(csr_minstret & 0xFFFFFFFF);
+    case CSR_INSTRETH:
+        return (uint32_t)(csr_minstret >> 32);
+
+    // Machine information registers (read-only)
+    case CSR_MVENDORID:
+        return csr_mvendorid;
+    case CSR_MARCHID:
+        return csr_marchid;
+    case CSR_MIMPID:
+        return csr_mimpid;
+    case CSR_MHARTID:
+        return csr_mhartid;
     default:
         std::cerr << "Warning: Reading unknown CSR 0x" << std::hex << csr
                   << std::endl;
@@ -339,8 +383,6 @@ void RV32Simulator::write_csr(uint32_t csr, uint32_t value) {
     case CSR_MSTATUS:
         csr_mstatus = value & 0x00001888;
         break;     // Only writable bits
-    case CSR_MISA: /* Read-only */
-        break;
     case CSR_MIE:
         csr_mie = value & 0x888;
         break;
@@ -362,6 +404,38 @@ void RV32Simulator::write_csr(uint32_t csr, uint32_t value) {
     case CSR_MIP:
         csr_mip = value & 0x888;
         break;
+
+    // Machine-mode counters (writable in M-mode)
+    case CSR_MCYCLE:
+        csr_mcycle = (csr_mcycle & 0xFFFFFFFF00000000ULL) | value;
+        break;
+    case CSR_MCYCLEH:
+        csr_mcycle = (csr_mcycle & 0x00000000FFFFFFFFULL) | ((uint64_t)value << 32);
+        break;
+    case CSR_MINSTRET:
+        csr_minstret = (csr_minstret & 0xFFFFFFFF00000000ULL) | value;
+        break;
+    case CSR_MINSTRETH:
+        csr_minstret = (csr_minstret & 0x00000000FFFFFFFFULL) | ((uint64_t)value << 32);
+        break;
+
+    // User-level counters (read-only)
+    case CSR_CYCLE:
+    case CSR_CYCLEH:
+    case CSR_TIME:
+    case CSR_TIMEH:
+    case CSR_INSTRET:
+    case CSR_INSTRETH:
+
+    // Machine information registers (read-only)
+    case CSR_MVENDORID:
+    case CSR_MARCHID:
+    case CSR_MIMPID:
+    case CSR_MHARTID:
+    case CSR_MISA:  // MISA is read-only
+        // Read-only CSRs, ignore writes
+        break;
+
     default:
         std::cerr << "Warning: Writing unknown CSR 0x" << std::hex << csr
                   << std::endl;
@@ -620,6 +694,8 @@ void RV32Simulator::step() {
 
     uint32_t next_pc = pc + 4;
     inst_count++;
+    csr_mcycle++;     // Increment machine cycle counter
+    csr_minstret++;   // Increment machine instructions retired counter
 
     // Trace variables
     int trace_rd = -1;

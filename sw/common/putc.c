@@ -15,10 +15,10 @@ extern int _write(int file, const void *ptr, size_t len);
 int putc(int c, FILE *stream) {
     // Ignore stream parameter in bare-metal (always write to stdout)
     (void)stream;
-    
+
     unsigned char ch = (unsigned char)c;
     int result = _write(1, &ch, 1);
-    
+
     return (result == 1) ? c : EOF;
 }
 
@@ -26,7 +26,7 @@ int putc(int c, FILE *stream) {
 int putchar(int c) {
     unsigned char ch = (unsigned char)c;
     int result = _write(1, &ch, 1);
-    
+
     return (result == 1) ? c : EOF;
 }
 

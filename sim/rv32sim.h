@@ -106,6 +106,26 @@ struct Elf32_Sym {
 #define CSR_MTVAL     0x343
 #define CSR_MIP       0x344
 
+// Machine Counter/Timers (writable in M-mode)
+#define CSR_MCYCLE    0xb00  // Machine cycle counter (lower 32 bits)
+#define CSR_MINSTRET  0xb02  // Machine instructions retired (lower 32 bits)
+#define CSR_MCYCLEH   0xb80  // Machine cycle counter (upper 32 bits)
+#define CSR_MINSTRETH 0xb82  // Machine instructions retired (upper 32 bits)
+
+// User-level CSRs (read-only counters)
+#define CSR_CYCLE     0xc00  // Cycle counter (alias to mcycle)
+#define CSR_TIME      0xc01  // Timer (alias to mcycle)
+#define CSR_INSTRET   0xc02  // Instructions retired (alias to minstret)
+#define CSR_CYCLEH    0xc80  // Cycle counter high
+#define CSR_TIMEH     0xc81  // Timer high
+#define CSR_INSTRETH  0xc82  // Instructions retired high
+
+// Machine information CSRs (read-only)
+#define CSR_MVENDORID 0xf11  // Vendor ID
+#define CSR_MARCHID   0xf12  // Architecture ID
+#define CSR_MIMPID    0xf13  // Implementation ID
+#define CSR_MHARTID   0xf14  // Hart ID
+
 // Exception/Interrupt codes
 #define CAUSE_MISALIGNED_FETCH    0
 #define CAUSE_FETCH_ACCESS        1
@@ -191,6 +211,16 @@ public:
     uint32_t csr_mcause;
     uint32_t csr_mtval;
     uint32_t csr_mip;
+
+    // Machine-level counters (writable in M-mode)
+    uint64_t csr_mcycle;    // 64-bit cycle counter
+    uint64_t csr_minstret;  // 64-bit instruction counter
+
+    // Machine information registers (read-only)
+    uint32_t csr_mvendorid;  // Vendor ID
+    uint32_t csr_marchid;    // Architecture ID
+    uint32_t csr_mimpid;     // Implementation ID
+    uint32_t csr_mhartid;    // Hart ID (hardware thread)
 
     // Exception handling
     bool exception_occurred;

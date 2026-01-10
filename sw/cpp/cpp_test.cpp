@@ -1,7 +1,14 @@
-// C++ test program - Tests global constructors
+// C++ test program - Tests global constructors and C library integration
 // Demonstrates C++ features in embedded environment
 
-// Declare _write from syscall.c
+// C library functions
+extern "C" {
+    int printf(const char *format, ...);
+    int puts(const char *s);
+    int putchar(int c);
+}
+
+// Declare _write from syscall.c (for backward compatibility)
 extern "C" int _write(int file, char *ptr, int len);
 
 // Helper function to get string length
@@ -18,28 +25,28 @@ static void int_to_str(int val, char* buf) {
         buf[1] = '\0';
         return;
     }
-    
+
     int i = 0;
     int is_negative = 0;
-    
+
     if (val < 0) {
         is_negative = 1;
         val = -val;
     }
-    
+
     // Convert digits in reverse
     char temp[16];
     while (val > 0) {
         temp[i++] = '0' + (val % 10);
         val /= 10;
     }
-    
+
     // Add negative sign if needed
     int j = 0;
     if (is_negative) {
         buf[j++] = '-';
     }
-    
+
     // Reverse the digits
     while (i > 0) {
         buf[j++] = temp[--i];
@@ -67,11 +74,11 @@ public:
         const char* msg1 = "Object: ";
         const char* msg2 = ", Value: ";
         char num_str[16];
-        
+
         _write(1, (char*)msg1, strlen_local(msg1));
         _write(1, (char*)name, strlen_local(name));
         _write(1, (char*)msg2, strlen_local(msg2));
-        
+
         int_to_str(value, num_str);
         _write(1, num_str, strlen_local(num_str));
         _write(1, (char*)"\n", 1);
@@ -89,36 +96,40 @@ TestClass& get_static_obj() {
 }
 
 int main() {
-    const char* msg;
-    
-    msg = "\n=== ENTERING MAIN ===\n";
-    _write(1, (char*)msg, strlen_local(msg));
-    
-    msg = "\n=== C++ Test Program ===\n";
-    _write(1, (char*)msg, strlen_local(msg));
-    
-    msg = "\nGlobal constructors executed before main():\n";
-    _write(1, (char*)msg, strlen_local(msg));
-    
+    puts("\n=== ENTERING MAIN ===");
+
+    printf("\n=== C++ Test Program ===\n");
+
+    puts("\nGlobal constructors executed before main():");
+
     // Display global objects
     global_obj1.display();
     global_obj2.display();
-    
-    msg = "\nCreating local object:\n";
-    _write(1, (char*)msg, strlen_local(msg));
+
+    puts("\nCreating local object:");
     TestClass local_obj("LocalObject", 123);
     local_obj.display();
-    
-    msg = "\nAccessing static local object (guard variable test):\n";
-    _write(1, (char*)msg, strlen_local(msg));
+
+    puts("\nAccessing static local object (guard variable test):");
     get_static_obj().display();
-    
-    msg = "\nCalling again (should not reconstruct):\n";
-    _write(1, (char*)msg, strlen_local(msg));
+
+    puts("\nCalling again (should not reconstruct):");
     get_static_obj().display();
-    
-    msg = "\n=== C++ Test Complete ===\n";
-    _write(1, (char*)msg, strlen_local(msg));
-    
+
+    // Test C library integration
+    puts("\n=== Testing C Library Integration ===");
+    printf("printf test: %d + %d = %d\n", 10, 20, 30);
+    printf("hex: 0x%x, string: %s\n", 255, "test");
+    putchar('A');
+    putchar('\n');
+    // Test C library integration
+    puts("\n=== Testing C Library Integration ===");
+    printf("printf test: %d + %d = %d\n", 10, 20, 30);
+    printf("hex: 0x%x, string: %s\n", 255, "test");
+    putchar('A');
+    putchar('\n');
+
+    puts("\n=== C++ Test Complete ===");
+
     return 0;
 }

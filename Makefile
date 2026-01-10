@@ -54,7 +54,7 @@ CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -I$(SW_DIR)/include
 LDFLAGS = -T $(SW_COMMON_DIR)/link.ld -Wl,--gc-sections -Wl,-Map=$(BUILD_DIR)/test.map
 LDFLAGS += -Wl,--wrap=fflush
-LDFLAGS += -lc -lgcc
+LDFLAGS += -lc -lgcc -lm
 
 # Determine test source files
 # Tests can be in sw/<test>/ directory (with multiple .c files) or sw/<test>.c (single file)
@@ -65,21 +65,21 @@ TEST_FILE = $(SW_DIR)/$(TEST).c
 ifneq ($(wildcard $(TEST_DIR)/*.c),)
     # Test directory exists with .c files
     TEST_C_SOURCES = $(wildcard $(TEST_DIR)/*.c)
-    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(TEST_C_SOURCES)
+    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(SW_COMMON_DIR)/printf.c $(SW_COMMON_DIR)/putc.c $(SW_COMMON_DIR)/puts.c $(TEST_C_SOURCES)
 else ifneq ($(wildcard $(TEST_DIR)/*.cpp),)
     # Test directory exists with .cpp files (C++ test)
     TEST_CPP_SOURCES = $(wildcard $(TEST_DIR)/*.cpp)
-    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(TEST_CPP_SOURCES)
+    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(SW_COMMON_DIR)/printf.c $(SW_COMMON_DIR)/putc.c $(SW_COMMON_DIR)/puts.c $(TEST_CPP_SOURCES)
     # Use C++ compiler and add C++ flags
     CC = $(CXX)
     CFLAGS += -fno-exceptions -fno-rtti
     LDFLAGS += -lstdc++
 else ifneq ($(wildcard $(TEST_FILE)),)
     # Single test file exists
-    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(TEST_FILE)
+    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(SW_COMMON_DIR)/printf.c $(SW_COMMON_DIR)/putc.c $(SW_COMMON_DIR)/puts.c $(TEST_FILE)
 else
     # Fallback for backward compatibility
-    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(SW_DIR)/$(TEST)_test.c
+    SW_SOURCES = $(SW_COMMON_DIR)/start.S $(SW_COMMON_DIR)/trap.c $(SW_COMMON_DIR)/syscall.c $(SW_COMMON_DIR)/printf.c $(SW_COMMON_DIR)/putc.c $(SW_COMMON_DIR)/puts.c $(SW_DIR)/$(TEST)_test.c
 endif
 
 # Build artifacts
@@ -339,7 +339,9 @@ sw: $(BUILD_DIR) $(SW_ELF) $(SW_DUMP)
 	@$(SIZE) $(SW_ELF)
 
 # Check if TEST has changed and force rebuild if needed
-$(TEST_MARKER): $(BUILD_DIR)
+# Make this PHONY so it always runs to check if TEST changed
+.PHONY: $(TEST_MARKER)
+$(TEST_MARKER): | $(BUILD_DIR)
 	@if [ ! -f $(TEST_MARKER) ] || [ "$$(cat $(TEST_MARKER) 2>/dev/null)" != "$(TEST)" ]; then \
 		echo "TEST changed to $(TEST), forcing software rebuild..."; \
 		rm -f $(SW_ELF) $(SW_DUMP); \
@@ -348,7 +350,7 @@ $(TEST_MARKER): $(BUILD_DIR)
 
 $(SW_ELF): $(TEST_MARKER) $(SW_SOURCES) $(SW_COMMON_DIR)/link.ld
 	@echo "Building software for TEST=$(TEST)..."
-	$(CC) $(CFLAGS) $(LDFLAGS) $(SW_SOURCES) -o $@
+	$(CC) $(CFLAGS) $(SW_SOURCES) $(LDFLAGS) -o $@
 
 $(SW_DUMP): $(SW_ELF)
 	$(OBJDUMP) -D $< > $@
@@ -388,7 +390,7 @@ build-verilator: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
 .PHONY: rtl
 rtl: sw build-verilator
 	@echo "=== Running RTL simulation ==="
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	@set -o pipefail; $(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
 	@echo "=== RTL simulation complete ==="
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
@@ -451,7 +453,7 @@ freertos-rtl-%: build-verilator
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test: $* ==="
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	@set -o pipefail; $(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) +MAX_CYCLES=0 | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -475,7 +477,8 @@ freertos-sim-%: build-sim
 	fi
 	@$(MAKE) freertos-$*
 	@echo "=== Running FreeRTOS Test in Simulator: $* ==="
-	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+	@set -o pipefail; \
+	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
@@ -493,7 +496,8 @@ freertos-compare-%:
 	@$(MAKE) freertos-$*
 	@echo "=== Running and comparing FreeRTOS test: $* ==="
 	@$(MAKE) freertos-rtl-$* TRACE=1
-	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+	@set -o pipefail; \
+	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
@@ -1172,7 +1176,7 @@ zephyr-rtl-%: build-verilator
 	fi
 	@$(MAKE) zephyr-$*
 	@echo "=== Running Zephyr Test: $* ==="
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	@set -o pipefail; $(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) +MAX_CYCLES=0 | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1196,7 +1200,8 @@ zephyr-sim-%: build-sim
 	fi
 	@$(MAKE) zephyr-$*
 	@echo "=== Running Zephyr Test in Simulator: $* ==="
-	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+	@set -o pipefail; \
+	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
@@ -1214,7 +1219,8 @@ zephyr-compare-%:
 	@$(MAKE) zephyr-$*
 	@echo "=== Running and comparing Zephyr test: $* ==="
 	@$(MAKE) zephyr-rtl-$* TRACE=1
-	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+	@set -o pipefail; \
+	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
@@ -1317,7 +1323,7 @@ check-nuttx:
 nuttx-rtl-%: build-verilator
 	@$(MAKE) nuttx-$*
 	@echo "=== Running NuttX sample in RTL simulation: $* ==="
-	$(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	@set -o pipefail; $(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) +MAX_CYCLES=0 | tee $(BUILD_DIR)/rtl_output.log
 	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
@@ -1329,7 +1335,8 @@ nuttx-rtl-%: build-verilator
 nuttx-sim-%: build-sim
 	@$(MAKE) nuttx-$*
 	@echo "=== Running NuttX Test: $* ==="
-	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+	@set -o pipefail; \
+	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
@@ -1343,7 +1350,8 @@ nuttx-compare-%:
 	@$(MAKE) nuttx-rtl-$* TRACE=1
 	@echo ""
 	@echo "Running Spike ISA simulator with the same binary..."
-	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
+	@set -o pipefail; \
+	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
 		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
