@@ -125,9 +125,6 @@ bool load_elf(Vtb_soc* dut, const std::string& filename) {
             continue;
         }
 
-        printf("Loading segment %d: paddr=0x%08x filesz=0x%x memsz=0x%x\n",
-               i, phdr.p_paddr, phdr.p_filesz, phdr.p_memsz);
-
         // Seek to segment data
         fseek(f, phdr.p_offset, SEEK_SET);
 

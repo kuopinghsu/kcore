@@ -1070,7 +1070,7 @@ void RV32Simulator::step() {
                    trace_mem_addr, trace_mem_val, trace_is_store, trace_is_csr,
                    trace_csr_num);
     regs[0] = 0; // x0 is always 0
-    
+
     // Check if exception occurred during instruction execution
     if (exception_occurred) {
         pc = exception_pc;
@@ -1120,6 +1120,8 @@ bool RV32Simulator::load_elf(const char *filename) {
     file.seekg(ehdr.e_phoff);
     for (int i = 0; i < ehdr.e_phnum; i++) {
         Elf32_Phdr phdr;
+        size_t phdr_pos = ehdr.e_phoff + i * sizeof(Elf32_Phdr);
+        file.seekg(phdr_pos);
         file.read((char *)&phdr, sizeof(phdr));
 
         if (phdr.p_type == PT_LOAD) {

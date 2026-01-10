@@ -6,6 +6,12 @@
     .type _start, @function
 
 _start:
+    // Initialize global pointer
+    .option push
+    .option norelax
+    la gp, __global_pointer$
+    .option pop
+
     // Disable interrupts
     csrci mstatus, 0x8
     
@@ -22,27 +28,17 @@ _start:
     bltu a0, a1, 1b
 2:
     
-    // Call C++ global constructors from .init_array
-    // Manual implementation instead of __libc_init_array due to software simulator issues
-    la a0, __init_array_start
-    la a1, __init_array_end
-    bgeu a0, a1, 4f
-3:
-    lw t0, 0(a0)
-    // Save a0, a1 on stack before calling constructor
-    addi sp, sp, -16
-    sw a0, 0(sp)
-    sw a1, 4(sp)
-    sw ra, 8(sp)
-    jalr ra, t0, 0
-    // Restore a0, a1, ra after constructor returns
-    lw ra, 8(sp)
-    lw a1, 4(sp)
-    lw a0, 0(sp)
-    addi sp, sp, 16
-    addi a0, a0, 4
-    bltu a0, a1, 3b
-4:
+    // Register global termination functions (if atexit exists)
+    .weak   atexit
+    la      a0, atexit
+    beqz    a0, .Lweak_atexit
+    .weak   __libc_fini_array
+    la      a0, __libc_fini_array
+    call    atexit
+.Lweak_atexit:
+
+    // Call newlib initialization (including constructors)
+    call __libc_init_array
     
     // Set up trap vector
     la t0, trap_vector
@@ -55,22 +51,19 @@ _start:
     // Call main
     call main
     
-    // Exit simulation (write exit code to tohost)
-    // Exit code format: (exit_code << 1) | 1
-    slli a0, a0, 1
-    ori a0, a0, 1
-    la t0, tohost
-    sw a0, 0(t0)
-    
-    // Also write to legacy magic address for backward compatibility
-    li t0, 0xFFFFFFF0
-    sw a0, 0(t0)
-    
-    // Infinite loop in case simulation doesn't stop
-_hang:
-    j _hang
+    // Exit via newlib's exit function
+    tail exit
+    .size _start, .-_start
+
+// DSO handle for dynamic shared object support
+    .section .data
+    .global __dso_handle
+    .weak   __dso_handle
+__dso_handle:
+    .long   0
 
 // Trap handler
+    .section .text.init
     .align 4
 trap_vector:
     // Save context
@@ -148,5 +141,3 @@ trap_vector:
     addi sp, sp, 128
     
     mret
-
-    .size _start, .-_start

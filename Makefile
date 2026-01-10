@@ -502,7 +502,7 @@ freertos-compare-%:
 
 # Pattern rule for test shortcuts
 .PHONY: rtl-%
-rtl-%: sw
+rtl-%:
 	@if [ ! -d $(SW_DIR)/$* ] && [ ! -f $(SW_DIR)/$*.c ]; then \
 		echo "Error: Test '$*' not found"; \
 		echo "Expected: $(SW_DIR)/$*/ (directory) or $(SW_DIR)/$*.c (file)"; \
@@ -510,6 +510,7 @@ rtl-%: sw
 		find $(SW_DIR) -mindepth 1 -maxdepth 1 -type d ! -name "common" ! -name "include" -exec basename {} \; | sed 's/^/  /' || echo "  (none found)"; \
 		exit 1; \
 	fi
+	@$(MAKE) TEST=$* sw
 	@$(MAKE) TEST=$* build-verilator
 	@$(MAKE) TEST=$* rtl
 
