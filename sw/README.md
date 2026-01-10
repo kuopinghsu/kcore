@@ -9,12 +9,22 @@ This directory contains test programs for the RISC-V processor.
 ```
 sw/
 ├── common/           # Shared startup code and linker scripts
+│   ├── start.S       # Assembly startup and reset vector
+│   ├── trap.c        # Default trap handler (overridable)
+│   ├── syscall.c     # System call implementations (_write, _sbrk, etc.)
+│   ├── printf.c      # Full printf/sprintf/snprintf implementation
+│   ├── putc.c        # Character output (putc, putchar, fputc)
+│   ├── puts.c        # String output (puts, fputs)
+│   └── link.ld       # Linker script
 ├── include/          # Shared headers (CSR operations)
 ├── simple/           # Simple smoke test (476B)
 ├── hello/            # Console output test (68KB, printf)
 ├── uart/             # UART TX/RX hardware test (6KB)
 ├── interrupt/        # Timer interrupt test (4.2KB)
 ├── full/             # Comprehensive test suite (4.1KB)
+├── printf/           # Printf test suite (~50 test cases)
+├── cpp/              # C++ integration test
+├── algo/             # Algorithm test (QuickSort, FFT, Matrix ops)
 ├── dhry/             # Dhrystone benchmark (8KB)
 ├── coremark/         # CoreMark benchmark
 ├── embench/          # Embench IoT suite
@@ -130,6 +140,49 @@ Default trap handler providing:
 
 **Usage**: Simply define your own `trap_handler()` function in your test code to override the default behavior.
 
+### `common/syscall.c`
+System call implementations providing:
+- `_write()`: Output to magic address (0xFFFFFFF4)
+- `_sbrk()`: Heap management (malloc support)
+- `_exit()`: Program termination via magic address (0xFFFFFFF0)
+- `_fflush()`: No-op (wrapped by linker)
+- Other newlib stubs
+
+### `common/printf.c`
+Full printf implementation (~632 lines):
+- **Functions**: printf(), vprintf(), sprintf(), snprintf(), vsprintf()
+- **Format specifiers**: %c, %s, %d, %i, %u, %x, %X, %o, %p, %f
+- **Length modifiers**: hh, h, l, ll, z, t
+- **Flags**: -, +, 0, space, #
+- **Width and precision**: %10.2f
+- **Compile option**: `-DPRINTF_DISABLE_FLOAT` (saves ~6% code)
+- **C++ compatible**: extern "C" guards
+
+### `common/putc.c`
+Character output functions:
+- `putc(int c, FILE *stream)`: Output character
+- `putchar(int c)`: Output to stdout
+- `fputc(int c, FILE *stream)`: Same as putc
+- All call `_write(1, &ch, 1)` internally
+
+### `common/puts.c`
+String output functions:
+- `puts(const char *s)`: Output string with newline
+- `fputs(const char *s, FILE *stream)`: Output string without newline
+- Uses `_write()` for efficient output
+
+**Usage Example**:
+```c
+#include <stdio.h>
+
+int main(void) {
+    printf("Hello, %s!\n", "World");
+    puts("Second line");
+    putchar('A');
+    return 0;
+}
+```
+
 ### `common/link.ld`
 Linker script defining:
 - Memory regions: RAM at 0x8000_0000 (2MB)
@@ -216,7 +269,7 @@ make sw-hello         # Compile only
 
 1. **Status Register**: Read and verify all status bits
    - TX BUSY, TX FULL, RX READY, RX OVERRUN flags
-   
+
 2. **Character Transmission**: Send alphabet A-Z
 
 3. **Numeric Output**: Send digits 0-9
@@ -261,6 +314,178 @@ make sw-uart         # Compile only
 - FIFO status monitoring
 - Echo test with testbench stimulus
 - Validates bidirectional UART communication
+
+### Printf Test Suite (`printf/`)
+
+**File**: `printf.c`
+
+**Purpose**: Comprehensive printf/sprintf/snprintf implementation test
+
+**Test Coverage** (~50 test cases):
+
+1. **Basic Format Specifiers**
+   - Characters: %c
+   - Strings: %s
+   - Signed integers: %d, %i
+   - Unsigned integers: %u
+   - Hexadecimal: %x, %X (lowercase/uppercase)
+   - Octal: %o
+   - Pointers: %p
+
+2. **Length Modifiers**
+   - char: %hhd, %hhu
+   - short: %hd, %hu
+   - long: %ld, %lu
+   - long long: %lld, %llu
+
+3. **Floating Point** (if PRINTF_DISABLE_FLOAT not defined)
+   - %f: Fixed-point notation
+   - Precision control
+   - Special values: infinity, NaN
+
+4. **Format Flags**
+   - Left justify: %-
+   - Force sign: %+
+   - Space for sign: %
+   - Zero padding: %0
+   - Alternate form: %#
+
+5. **Width and Precision**
+   - Minimum width: %10d
+   - Precision: %.5f
+   - Combined: %10.2f
+
+6. **Edge Cases**
+   - NULL pointers
+   - Empty strings
+   - Zero values
+   - Negative values
+   - Buffer truncation (snprintf)
+
+**Features**:
+- Full printf/sprintf/snprintf implementation in `common/printf.c`
+- Compile option: `-DPRINTF_DISABLE_FLOAT` (saves ~6% code size)
+- Uses `_write()` for output (magic address 0xFFFFFFF4)
+- C++ compatible (extern "C" guards)
+
+**Expected Results**:
+- Exit code: 0 (all tests pass)
+- ~50 lines of formatted output
+- Instructions executed: ~50,000-80,000
+
+**Usage**:
+```bash
+make rtl-printf              # Run with float support
+make rtl-printf CFLAGS=-DPRINTF_DISABLE_FLOAT  # Integer-only
+make sw-printf               # Compile only
+```
+
+### C++ Integration Test (`cpp/`)
+
+**File**: `cpp_test.cpp`
+
+**Purpose**: Validate C++ support and C/C++ interoperability
+
+**Test Coverage**:
+
+1. **C++ Language Features**
+   - Classes with constructors/destructors
+   - Member functions (public/private)
+   - Static member variables
+   - Operator overloading
+   - Global constructors (called before main)
+   - Static local objects with lazy initialization
+
+2. **C Library Integration**
+   - printf() with C++ strings
+   - puts() output
+   - putchar() character output
+   - Demonstrates extern "C" linkage
+
+3. **Object Lifecycle**
+   - Constructor execution order tracking
+   - Destructor execution (on exit)
+   - Static initialization tracking
+
+**Features**:
+- Demonstrates C++ on bare metal RISC-V
+- Tests GCC C++ runtime (_cxa_atexit, etc.)
+- Validates newlib C++ support
+- Shows how to use printf/puts/putc from C++
+
+**Expected Results**:
+- Exit code: 0 (success)
+- Global constructor output
+- Class construction/destruction messages
+- Instructions executed: ~20,000-30,000
+
+**Usage**:
+```bash
+make rtl-cpp                 # RTL simulation
+make sw-cpp                  # Compile only
+```
+
+**Important**: C library functions (printf, puts, putc) are declared with extern "C" in their implementations (`common/*.c`), enabling seamless C/C++ interoperability.
+
+### Algorithm Test Suite (`algo/`)
+
+**File**: `algo.c`
+
+**Purpose**: Complex algorithm demonstration across all data types
+
+**Test Coverage**:
+
+1. **QuickSort Algorithm**
+   - Integer array sorting (100 elements)
+   - Float array sorting (50 elements)
+   - Partition/swap operations
+   - Validation with checksums
+
+2. **FFT (Fast Fourier Transform)**
+   - Radix-2 decimation-in-time algorithm
+   - Complex number arithmetic (double precision)
+   - 16-point FFT computation
+   - Bit reversal permutation
+   - Magnitude calculation
+
+3. **Matrix Operations**
+   - 4x4 double precision matrices
+   - Matrix multiplication
+   - Matrix transpose
+   - Result validation
+
+4. **Statistical Functions**
+   - Mean calculation
+   - Variance and standard deviation
+   - 100-element dataset
+
+5. **Data Type Operations**
+   - char, short, int, long long
+   - float, double precision
+   - Type conversions
+   - Overflow handling
+
+**Features**:
+- Comprehensive use of math library (-lm)
+- Uses sqrt(), cos(), sin() functions
+- Complex number struct implementation
+- Factorial calculation (long long)
+- Demonstrates all RISC-V data types
+
+**Expected Results**:
+- Exit code: 0 (all tests pass)
+- ~1.8M cycles
+- ~342K instructions retired
+- CPI ~5.3
+
+**Usage**:
+```bash
+make rtl-algo                # RTL simulation
+make sim-algo                # Software simulator
+make sw-algo                 # Compile only
+```
+
+**Note**: Requires math library (-lm) for sqrt, cos, sin functions.
 
 ### Full Test Suite (`full/`)
 

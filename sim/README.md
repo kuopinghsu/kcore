@@ -15,6 +15,18 @@ This directory contains tools for software-based verification using ISA simulato
 - **gdb_stub.c/h**: GDB Remote Serial Protocol implementation
 - **Makefile**: Build system for rv32sim simulator
 
+## Features
+
+**CSR Support**: Full RISC-V CSR implementation matching RTL
+- **Machine-mode CSRs**: mstatus, misa, mie, mtvec, mscratch, mepc, mcause, mtval, mip
+- **Machine counters**: mcycle/mcycleh, minstret/minstreth (64-bit, writable)
+- **User counters**: cycle/cycleh, time/timeh, instret/instreth (64-bit, read-only aliases)
+- **Machine info**: mvendorid, marchid, mimpid, mhartid (read-only, hardwired to 0)
+
+**Interrupt Support**: Timer, software, and external interrupts via CLINT
+
+**GDB Remote Debugging**: Full breakpoint and watchpoint support (see below)
+
 ### Analysis Scripts (moved to scripts/)
 
 - **trace_compare.py**: Python script to compare RTL trace with software simulator trace (now in scripts/)

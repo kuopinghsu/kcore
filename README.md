@@ -2,7 +2,7 @@
 
 A complete RISC-V RV32IMA processor implementation with 5-stage pipeline, supporting interrupts and comprehensive verification infrastructure.
 
-> **⚠️ IMPORTANT NOTE**  
+> **⚠️ IMPORTANT NOTE**
 > - For detailed project status, completion tracking, and current issues, see [`PROJECT_STATUS.md`](PROJECT_STATUS.md)
 > - For quick start instructions, see [`QUICKSTART.md`](QUICKSTART.md)
 
@@ -10,12 +10,12 @@ A complete RISC-V RV32IMA processor implementation with 5-stage pipeline, suppor
 
 ### Critical Hardware Constraints
 
-1. **UART Baud Divisor: BAUD_DIV ≥ 4**  
+1. **UART Baud Divisor: BAUD_DIV ≥ 4**
    The UART RX receiver requires a minimum of 4 clock cycles per bit for reliable sampling at the bit center. This is a hardware timing constraint in the receive state machine. For example, at 50 MHz clock:
    - Minimum BAUD_DIV = 4 → Maximum baud rate = 12.5 Mbaud
    - Formula: `Baud Rate = CLK_FREQ / BAUD_DIV`
 
-2. **Memory Size for RISCOF Tests: 2MB Required**  
+2. **Memory Size for RISCOF Tests: 2MB Required**
    The RISC-V architectural compliance test suite requires 2MB of memory. The `jal-01` test generates a 1.76MB binary that overflows with smaller memory configurations:
    - 1MB configuration: 37/38 tests pass (jal-01 fails with linker overflow)
    - 2MB configuration: 38/38 tests pass ✓
@@ -87,6 +87,19 @@ A complete RISC-V RV32IMA processor implementation with 5-stage pipeline, suppor
 - Performance: 8.13 DMIPS @ 50 MHz, CPI ~8-9
 - printf() and all C library functions fully functional
 - GDB remote debugging with breakpoints and watchpoints (rv32sim)
+
+**CSR Support** (RTL and Simulator):
+- Machine-mode CSRs: mstatus, misa, mie, mtvec, mscratch, mepc, mcause, mtval, mip
+- Machine counters: mcycle/mcycleh, minstret/minstreth (64-bit, writable)
+- User counters: cycle/cycleh, time/timeh, instret/instreth (read-only aliases)
+- Machine info: mvendorid, marchid, mimpid, mhartid (hardwired to 0)
+
+**C/C++ Library Support**:
+- Full printf/sprintf/snprintf implementation with float support
+- Standard I/O: puts, putc, putchar
+- Math library: sqrt, cos, sin, etc. (-lm)
+- C++ support: constructors, destructors, operator overloading
+- Compile option: PRINTF_DISABLE_FLOAT (saves ~6% code size)
 
 **Peripherals**:
 - CLINT: Timer and software interrupts (MRET instruction fully implemented)
@@ -424,7 +437,7 @@ Full Zephyr RTOS port for the kcore RV32IM processor with out-of-tree SoC and bo
 **Port Components**:
 - **SoC Definition**: Custom RISC-V RV32IM kcore SoC configuration
 - **Board Support**: kcore_board with complete device tree
-- **Console Drivers**: 
+- **Console Drivers**:
   - Magic Address Console (0xFFFFFFF4) - Fast simulation, instant output
   - UART Console (0x10000000) - Hardware accurate, 115200 baud
 - **Sample Application**: Hello World with k_msleep() and counter loop
