@@ -56,7 +56,10 @@ module soc_top #(
 
     // Exit detection
     output logic        exit_request,
-    output logic [31:0] exit_code
+    output logic [31:0] exit_code,
+
+    // Tohost address from ELF (0 = disabled, use magic address only)
+    input  logic [31:0] tohost_addr
 );
 
     // CPU simple interface signals
@@ -493,19 +496,27 @@ module soc_top #(
     // ========================================================================
     // Exit Detection - Magic Address Writes
     // ========================================================================
-    // Detect writes to magic exit address 0xFFFFFFF0
-    // The CPU writes exit code to this address to signal program completion
+    // Detect writes to magic exit address 0xFFFFFFF0 or tohost variable
+    // The CPU writes exit code to signal program completion
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             exit_request <= 1'b0;
             exit_code <= 32'h0;
         end else begin
-            // Detect write completion (valid && ready) to magic exit address
-            if (cpu_dmem_valid && cpu_dmem_ready && cpu_dmem_write &&
-                cpu_dmem_addr == 32'hFFFFFFF0) begin
-                exit_request <= 1'b1;
-                exit_code <= cpu_dmem_wdata;
+            // Detect write completion (valid && ready) to exit address
+            if (cpu_dmem_valid && cpu_dmem_ready && cpu_dmem_write) begin
+                // Check magic address or tohost address
+                if (cpu_dmem_addr == 32'hFFFFFFF0 ||
+                    (tohost_addr != 32'h0 && cpu_dmem_addr == tohost_addr)) begin
+                    exit_request <= 1'b1;
+                    // For tohost protocol, extract exit code from (value >> 1)
+                    if (cpu_dmem_addr == tohost_addr) begin
+                        exit_code <= cpu_dmem_wdata >> 1;
+                    end else begin
+                        exit_code <= cpu_dmem_wdata;
+                    end
+                end
             end
         end
     end

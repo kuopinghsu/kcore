@@ -80,7 +80,7 @@ void _exit(int status) {
     // Write debug message
     const char msg[] = "\n[_exit called with status=";
     _write(1, (char*)msg, sizeof(msg)-1);
-    
+
     char buf[16];
     int i = 0;
     int val = status;
@@ -105,12 +105,16 @@ void _exit(int status) {
     _write(1, buf, i);
     const char end[] = "]\n";
     _write(1, (char*)end, 2);
-    
+
     // tohost protocol: write (exit_code << 1) | 1
-    // For exit, we just use exit_code << 1
+    // For exit, we write (status << 1) | 1
     extern volatile unsigned long tohost;
     tohost = (status << 1) | 1;
-    
+
+    // Also write to magic exit address as fallback (for testbenches without tohost support)
+    volatile unsigned int* exit_addr = (volatile unsigned int*)0xFFFFFFF0;
+    *exit_addr = status;
+
     // Hang forever after exit
     while (1) {
         __asm__ volatile ("nop");

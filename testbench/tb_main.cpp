@@ -411,6 +411,7 @@ int main(int argc, char** argv) {
     dut->clk = 0;
     dut->rst_n = 0;
     dut->uart_rx = 1;
+    dut->tohost_addr = g_tohost_addr;  // Pass tohost address from ELF
 
     uint32_t prev_wb_pc = 0;
     uint32_t same_pc_retire_count = 0;
@@ -587,9 +588,9 @@ int main(int argc, char** argv) {
                 std::string sig_file = sig_arg + 11;  // Skip "+signature="
 
                 // Get signature begin/end addresses from ELF symbols
-                if (g_symbols.find("begin_signature") != g_symbols.end() && 
+                if (g_symbols.find("begin_signature") != g_symbols.end() &&
                     g_symbols.find("end_signature") != g_symbols.end()) {
-                    
+
                     uint32_t sig_begin = g_symbols["begin_signature"].addr;
                     uint32_t sig_end = g_symbols["end_signature"].addr;
 
@@ -618,7 +619,7 @@ int main(int argc, char** argv) {
                             for (int i = 0; i < granularity; i++) {
                                 value |= ((uint64_t)(uint8_t)mem_read_byte(addr + i)) << (i * 8);
                             }
-                            
+
                             // Format output based on granularity
                             int width = granularity * 2;  // 2 hex digits per byte
                             sig_out << std::hex << std::setw(width) << std::setfill('0') << value << std::endl;

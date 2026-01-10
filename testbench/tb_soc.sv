@@ -72,7 +72,10 @@ module tb_soc #(
 
     // Exit signal (magic address write detection)
     output logic        exit_request,
-    output logic [31:0] exit_code
+    output logic [31:0] exit_code,
+
+    // Tohost address from ELF
+    input  logic [31:0] tohost_addr
 );
 
     // AXI Memory Interface signals
@@ -126,7 +129,8 @@ module tb_soc #(
         .instret_count    (instret_count),
         .stall_count      (stall_count),
         .exit_request     (exit_request),
-        .exit_code        (exit_code)
+        .exit_code        (exit_code),
+        .tohost_addr      (tohost_addr)
     );
 
     // ========================================================================
