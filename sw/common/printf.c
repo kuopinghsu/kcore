@@ -11,7 +11,15 @@
  *
  * To disable floating point support (reduce code size):
  *   Define PRINTF_DISABLE_FLOAT at compile time
+ *
+ * To use hardware division/modulo instead of optimized bit operations:
+ *   Define PRINTF_USE_HARDWARE_DIV at compile time
  */
+
+// Use optimized division-free implementation by default
+#ifndef PRINTF_USE_HARDWARE_DIV
+#define PRINTF_OPTIMIZE_DIV_MOD 1
+#endif
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -127,7 +135,7 @@ static void printf_putstr_formatted(const char *str, const format_spec_t *spec) 
 }
 
 // Convert unsigned integer to string
-static char* uint_to_str(uint64_t value, char *buf, int base, bool uppercase) {
+static char* uint_to_str(uint64_t value, char *buf, const int base, bool uppercase) {
     const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
     char *ptr = buf + PRINTF_BUFFER_SIZE - 1;
     *ptr = '\0';
@@ -137,16 +145,79 @@ static char* uint_to_str(uint64_t value, char *buf, int base, bool uppercase) {
         return ptr;
     }
 
+#ifdef PRINTF_OPTIMIZE_DIV_MOD
+    // Optimized division/modulo for common bases without hardware divider
+    if (base == 16) {
+        // Base 16: use bit operations
+        while (value > 0) {
+            *(--ptr) = digits[value & 0xF];  // value % 16 = value & 0xF
+            value >>= 4;                     // value /= 16 = value >> 4
+        }
+    } else if (base == 8) {
+        // Base 8: use bit operations
+        while (value > 0) {
+            *(--ptr) = digits[value & 0x7];  // value % 8 = value & 0x7
+            value >>= 3;                     // value /= 8 = value >> 3
+        }
+    } else if (base == 10) {
+        // Base 10: use optimized division without hardware divider
+        // Uses the multiply-by-reciprocal method
+        while (value > 0) {
+            uint64_t q, r;
+            
+            // For small values, use simple subtraction
+            if (value < 10) {
+                *(--ptr) = digits[value];
+                break;
+            }
+            
+            // Optimized division by 10 using multiplication
+            // q = (value * 0x1999999999999999ULL + value) >> 64;
+            // This works because 0x1999999999999999 ≈ 2^64 / 10
+            
+            // Alternative: use shift and subtract method
+            // q ≈ (value >> 1) + (value >> 2) + (value >> 5) + (value >> 6) + ...
+            // Simplified: q ≈ value * 0.1
+            
+            // Method: q = ((value >> 1) + (value >> 2)) >> 2 for approximation
+            q = value >> 1;           // value / 2
+            q += value >> 2;          // + value / 4  
+            q += q >> 4;              // + value / 16
+            q += q >> 8;              // + value / 256
+            q += q >> 16;             // + value / 65536
+            q += q >> 32;             // + value / 4294967296 (for 64-bit)
+            q >>= 3;                  // divide by 8 to get approximately value/10
+            
+            // Calculate remainder and adjust if needed
+            r = value - (q << 3) - (q << 1); // r = value - q*10 = value - q*8 - q*2
+            if (r >= 10) {
+                q++;
+                r -= 10;
+            }
+            
+            *(--ptr) = digits[r];
+            value = q;
+        }
+    } else {
+        // Fallback for other bases (should rarely be used)
+        while (value > 0) {
+            *(--ptr) = digits[value % base];
+            value /= base;
+        }
+    }
+#else
+    // Standard implementation using hardware division/modulo
     while (value > 0) {
         *(--ptr) = digits[value % base];
         value /= base;
     }
+#endif
 
     return ptr;
 }
 
 // Print formatted integer
-static void printf_print_int(int64_t value, const format_spec_t *spec, int base, bool uppercase) {
+static void printf_print_int(int64_t value, const format_spec_t *spec, const int base, bool uppercase) {
     char buffer[PRINTF_BUFFER_SIZE];
     char sign = 0;
     uint64_t uvalue;
