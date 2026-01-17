@@ -11,12 +11,12 @@
 class RiscvDisassembler {
 public:
     RiscvDisassembler();
-    
+
     // Disassemble a 32-bit instruction at given PC
     // Automatically detects compressed (16-bit) vs normal (32-bit) instructions
     // Returns human-readable assembly string
     std::string disassemble(uint32_t instr, uint32_t pc = 0);
-    
+
 private:
     // Instruction format decoders
     std::string decode_r_type(uint32_t instr, uint32_t opcode, uint32_t funct3, uint32_t funct7);
@@ -31,7 +31,7 @@ private:
     std::string decode_c_quadrant0(uint16_t instr);
     std::string decode_c_quadrant1(uint16_t instr, uint32_t pc);
     std::string decode_c_quadrant2(uint16_t instr);
-    
+
     // Helper functions
     std::string reg_name(uint32_t reg);
     std::string c_reg_name(uint32_t reg);  // Compressed register (x8-x15)

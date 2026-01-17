@@ -10,50 +10,50 @@ std::string RiscvDisassembler::disassemble(uint32_t instr, uint32_t pc) {
     if ((instr & 0x3) != 0x3) {
         return decode_compressed((uint16_t)(instr & 0xFFFF), pc);
     }
-    
+
     // Extract common fields for 32-bit instructions
     uint32_t opcode = instr & 0x7F;
     uint32_t funct3 = (instr >> 12) & 0x7;
     uint32_t funct7 = (instr >> 25) & 0x7F;
     uint32_t funct5 = (instr >> 27) & 0x1F;
-    
+
     // Decode based on opcode
     switch (opcode) {
         case 0x37: // LUI
         case 0x17: // AUIPC
             return decode_u_type(instr, opcode);
-            
+
         case 0x6F: // JAL
             return decode_j_type(instr, pc);
-            
+
         case 0x67: // JALR
             return decode_i_type(instr, opcode, funct3);
-            
+
         case 0x63: // BRANCH
             return decode_b_type(instr, funct3, pc);
-            
+
         case 0x03: // LOAD
             return decode_i_type(instr, opcode, funct3);
-            
+
         case 0x23: // STORE
             return decode_s_type(instr, funct3);
-            
+
         case 0x13: // OP-IMM
             return decode_i_type(instr, opcode, funct3);
-            
+
         case 0x33: // OP (R-type ALU)
             return decode_r_type(instr, opcode, funct3, funct7);
-            
+
         case 0x0F: // FENCE
             if (funct3 == 0) return "fence";
             return "fence.i";
-            
+
         case 0x73: // SYSTEM (ECALL, EBREAK, CSR)
             return decode_system(instr, funct3);
-            
+
         case 0x2F: // AMO (Atomic)
             return decode_amo(instr, funct3, funct5);
-            
+
         default:
             return "unknown";
     }
@@ -63,10 +63,10 @@ std::string RiscvDisassembler::decode_r_type(uint32_t instr, uint32_t opcode, ui
     uint32_t rd = (instr >> 7) & 0x1F;
     uint32_t rs1 = (instr >> 15) & 0x1F;
     uint32_t rs2 = (instr >> 20) & 0x1F;
-    
+
     std::ostringstream oss;
     std::string mnemonic;
-    
+
     if (opcode == 0x33) { // OP
         if (funct7 == 0x00) {
             switch (funct3) {
@@ -131,11 +131,11 @@ std::string RiscvDisassembler::decode_r_type(uint32_t instr, uint32_t opcode, ui
             if (funct3 == 0x1) mnemonic = "bset";
         }
     }
-    
+
     if (mnemonic.empty()) {
         return "unknown";
     }
-    
+
     oss << mnemonic << " " << reg_name(rd) << "," << reg_name(rs1) << "," << reg_name(rs2);
     return oss.str();
 }
@@ -144,10 +144,10 @@ std::string RiscvDisassembler::decode_i_type(uint32_t instr, uint32_t opcode, ui
     uint32_t rd = (instr >> 7) & 0x1F;
     uint32_t rs1 = (instr >> 15) & 0x1F;
     int32_t imm = sign_extend(instr >> 20, 12);
-    
+
     std::ostringstream oss;
     std::string mnemonic;
-    
+
     if (opcode == 0x03) { // LOAD
         switch (funct3) {
             case 0x0: mnemonic = "lb"; break;
@@ -163,10 +163,10 @@ std::string RiscvDisassembler::decode_i_type(uint32_t instr, uint32_t opcode, ui
     } else if (opcode == 0x13) { // OP-IMM
         uint32_t shamt = imm & 0x1F;
         uint32_t funct7 = (instr >> 25) & 0x7F;
-        
+
         switch (funct3) {
             case 0x0: mnemonic = "addi"; break;
-            case 0x1: 
+            case 0x1:
                 if (funct7 == 0x60) {
                     // Zbb count/extend instructions (single operand)
                     if (shamt == 0x00) { return "clz " + reg_name(rd) + "," + reg_name(rs1); }
@@ -187,7 +187,7 @@ std::string RiscvDisassembler::decode_i_type(uint32_t instr, uint32_t opcode, ui
             case 0x2: mnemonic = "slti"; break;
             case 0x3: mnemonic = "sltiu"; break;
             case 0x4: mnemonic = "xori"; break;
-            case 0x5: 
+            case 0x5:
                 if (funct7 == 0x00) {
                     mnemonic = "srli";
                     imm = shamt;
@@ -214,7 +214,7 @@ std::string RiscvDisassembler::decode_i_type(uint32_t instr, uint32_t opcode, ui
             case 0x6: mnemonic = "ori"; break;
             case 0x7: mnemonic = "andi"; break;
         }
-        
+
         if (!mnemonic.empty()) {
             oss << mnemonic << " " << reg_name(rd) << "," << reg_name(rs1) << "," << imm;
             return oss.str();
@@ -223,7 +223,7 @@ std::string RiscvDisassembler::decode_i_type(uint32_t instr, uint32_t opcode, ui
         oss << "jalr " << reg_name(rd) << "," << reg_name(rs1) << "," << imm;
         return oss.str();
     }
-    
+
     return "unknown";
 }
 
@@ -231,20 +231,20 @@ std::string RiscvDisassembler::decode_s_type(uint32_t instr, uint32_t funct3) {
     uint32_t rs1 = (instr >> 15) & 0x1F;
     uint32_t rs2 = (instr >> 20) & 0x1F;
     int32_t imm = sign_extend(((instr >> 25) << 5) | ((instr >> 7) & 0x1F), 12);
-    
+
     std::ostringstream oss;
     std::string mnemonic;
-    
+
     switch (funct3) {
         case 0x0: mnemonic = "sb"; break;
         case 0x1: mnemonic = "sh"; break;
         case 0x2: mnemonic = "sw"; break;
     }
-    
+
     if (mnemonic.empty()) {
         return "unknown";
     }
-    
+
     oss << mnemonic << " " << reg_name(rs2) << "," << imm << "(" << reg_name(rs1) << ")";
     return oss.str();
 }
@@ -252,17 +252,17 @@ std::string RiscvDisassembler::decode_s_type(uint32_t instr, uint32_t funct3) {
 std::string RiscvDisassembler::decode_b_type(uint32_t instr, uint32_t funct3, uint32_t pc) {
     uint32_t rs1 = (instr >> 15) & 0x1F;
     uint32_t rs2 = (instr >> 20) & 0x1F;
-    
+
     // Reconstruct branch offset
     int32_t imm = sign_extend(
         ((instr >> 31) << 12) |
         (((instr >> 7) & 0x1) << 11) |
         (((instr >> 25) & 0x3F) << 5) |
         (((instr >> 8) & 0xF) << 1), 13);
-    
+
     std::ostringstream oss;
     std::string mnemonic;
-    
+
     switch (funct3) {
         case 0x0: mnemonic = "beq"; break;
         case 0x1: mnemonic = "bne"; break;
@@ -271,11 +271,11 @@ std::string RiscvDisassembler::decode_b_type(uint32_t instr, uint32_t funct3, ui
         case 0x6: mnemonic = "bltu"; break;
         case 0x7: mnemonic = "bgeu"; break;
     }
-    
+
     if (mnemonic.empty()) {
         return "unknown";
     }
-    
+
     uint32_t target = pc + imm;
     oss << mnemonic << " " << reg_name(rs1) << "," << reg_name(rs2) << "," << format_address(target);
     return oss.str();
@@ -284,9 +284,9 @@ std::string RiscvDisassembler::decode_b_type(uint32_t instr, uint32_t funct3, ui
 std::string RiscvDisassembler::decode_u_type(uint32_t instr, uint32_t opcode) {
     uint32_t rd = (instr >> 7) & 0x1F;
     uint32_t imm = instr & 0xFFFFF000;
-    
+
     std::ostringstream oss;
-    
+
     if (opcode == 0x37) { // LUI
         oss << "lui " << reg_name(rd) << ",0x" << std::hex << (imm >> 12);
     } else if (opcode == 0x17) { // AUIPC
@@ -294,20 +294,20 @@ std::string RiscvDisassembler::decode_u_type(uint32_t instr, uint32_t opcode) {
     } else {
         return "unknown";
     }
-    
+
     return oss.str();
 }
 
 std::string RiscvDisassembler::decode_j_type(uint32_t instr, uint32_t pc) {
     uint32_t rd = (instr >> 7) & 0x1F;
-    
+
     // Reconstruct jump offset
     int32_t imm = sign_extend(
         ((instr >> 31) << 20) |
         (((instr >> 12) & 0xFF) << 12) |
         (((instr >> 20) & 0x1) << 11) |
         (((instr >> 21) & 0x3FF) << 1), 21);
-    
+
     std::ostringstream oss;
     uint32_t target = pc + imm;
     oss << "jal " << reg_name(rd) << "," << format_address(target);
@@ -319,9 +319,9 @@ std::string RiscvDisassembler::decode_system(uint32_t instr, uint32_t funct3) {
     uint32_t rs1 = (instr >> 15) & 0x1F;
     uint32_t csr = instr >> 20;
     uint32_t zimm = rs1; // For CSRI instructions, rs1 field is immediate
-    
+
     std::ostringstream oss;
-    
+
     if (funct3 == 0x0) {
         // ECALL, EBREAK, MRET, WFI, etc.
         uint32_t imm = instr >> 20;
@@ -333,10 +333,10 @@ std::string RiscvDisassembler::decode_system(uint32_t instr, uint32_t funct3) {
         if (imm == 0x002) return "uret";
         return "unknown";
     }
-    
+
     std::string mnemonic;
     bool is_imm = false;
-    
+
     switch (funct3) {
         case 0x1: mnemonic = "csrrw"; break;
         case 0x2: mnemonic = "csrrs"; break;
@@ -345,17 +345,17 @@ std::string RiscvDisassembler::decode_system(uint32_t instr, uint32_t funct3) {
         case 0x6: mnemonic = "csrrsi"; is_imm = true; break;
         case 0x7: mnemonic = "csrrci"; is_imm = true; break;
     }
-    
+
     if (mnemonic.empty()) {
         return "unknown";
     }
-    
+
     if (is_imm) {
         oss << mnemonic << " " << reg_name(rd) << "," << csr_name(csr) << "," << zimm;
     } else {
         oss << mnemonic << " " << reg_name(rd) << "," << csr_name(csr) << "," << reg_name(rs1);
     }
-    
+
     return oss.str();
 }
 
@@ -365,21 +365,21 @@ std::string RiscvDisassembler::decode_amo(uint32_t instr, uint32_t funct3, uint3
     uint32_t rs2 = (instr >> 20) & 0x1F;
     uint32_t aq = (instr >> 26) & 0x1;
     uint32_t rl = (instr >> 27) & 0x1;
-    
+
     std::ostringstream oss;
     std::string mnemonic;
     std::string suffix;
-    
+
     // Width suffix
     if (funct3 == 0x2) suffix = ".w";
     else if (funct3 == 0x3) suffix = ".d";
     else return "unknown";
-    
+
     // Ordering suffix
     if (aq && rl) suffix += ".aqrl";
     else if (aq) suffix += ".aq";
     else if (rl) suffix += ".rl";
-    
+
     switch (funct5) {
         case 0x02: mnemonic = "lr"; break;
         case 0x03: mnemonic = "sc"; break;
@@ -393,17 +393,17 @@ std::string RiscvDisassembler::decode_amo(uint32_t instr, uint32_t funct3, uint3
         case 0x18: mnemonic = "amominu"; break;
         case 0x1C: mnemonic = "amomaxu"; break;
     }
-    
+
     if (mnemonic.empty()) {
         return "unknown";
     }
-    
+
     if (funct5 == 0x02) { // LR - no rs2
         oss << mnemonic << suffix << " " << reg_name(rd) << ",(" << reg_name(rs1) << ")";
     } else {
         oss << mnemonic << suffix << " " << reg_name(rd) << "," << reg_name(rs2) << ",(" << reg_name(rs1) << ")";
     }
-    
+
     return oss.str();
 }
 
@@ -414,7 +414,7 @@ std::string RiscvDisassembler::reg_name(uint32_t reg) {
         "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
         "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
     };
-    
+
     if (reg < 32) {
         return abi_names[reg];
     }
@@ -428,7 +428,7 @@ std::string RiscvDisassembler::csr_name(uint32_t csr) {
         case 0xF12: return "marchid";
         case 0xF13: return "mimpid";
         case 0xF14: return "mhartid";
-        
+
         // Machine Trap Setup
         case 0x300: return "mstatus";
         case 0x301: return "misa";
@@ -437,14 +437,14 @@ std::string RiscvDisassembler::csr_name(uint32_t csr) {
         case 0x304: return "mie";
         case 0x305: return "mtvec";
         case 0x306: return "mcounteren";
-        
+
         // Machine Trap Handling
         case 0x340: return "mscratch";
         case 0x341: return "mepc";
         case 0x342: return "mcause";
         case 0x343: return "mtval";
         case 0x344: return "mip";
-        
+
         // Machine Memory Protection
         case 0x3A0: return "pmpcfg0";
         case 0x3A1: return "pmpcfg1";
@@ -466,13 +466,13 @@ std::string RiscvDisassembler::csr_name(uint32_t csr) {
         case 0x3BD: return "pmpaddr13";
         case 0x3BE: return "pmpaddr14";
         case 0x3BF: return "pmpaddr15";
-        
+
         // Machine Counter/Timers
         case 0xB00: return "mcycle";
         case 0xB02: return "minstret";
         case 0xB80: return "mcycleh";
         case 0xB82: return "minstreth";
-        
+
         // User Counter/Timers
         case 0xC00: return "cycle";
         case 0xC01: return "time";
@@ -480,7 +480,7 @@ std::string RiscvDisassembler::csr_name(uint32_t csr) {
         case 0xC80: return "cycleh";
         case 0xC81: return "timeh";
         case 0xC82: return "instreth";
-        
+
         default: {
             std::ostringstream oss;
             oss << "0x" << std::hex << csr;
@@ -514,7 +514,7 @@ std::string RiscvDisassembler::c_reg_name(uint32_t reg) {
 
 std::string RiscvDisassembler::decode_compressed(uint16_t instr, uint32_t pc) {
     uint32_t quadrant = instr & 0x3;
-    
+
     switch (quadrant) {
         case 0: return decode_c_quadrant0(instr);
         case 1: return decode_c_quadrant1(instr, pc);
@@ -527,12 +527,12 @@ std::string RiscvDisassembler::decode_c_quadrant0(uint16_t instr) {
     uint32_t funct3 = (instr >> 13) & 0x7;
     uint32_t rd_rs2_p = (instr >> 2) & 0x7;  // rd'/rs2' for 3-bit encoding
     uint32_t rs1_p = (instr >> 7) & 0x7;     // rs1' for 3-bit encoding
-    
+
     std::ostringstream oss;
-    
+
     switch (funct3) {
         case 0x0: { // C.ADDI4SPN
-            uint32_t nzuimm = ((instr >> 7) & 0x30) | ((instr >> 1) & 0x3C0) | 
+            uint32_t nzuimm = ((instr >> 7) & 0x30) | ((instr >> 1) & 0x3C0) |
                              ((instr >> 4) & 0x4) | ((instr >> 2) & 0x8);
             if (nzuimm == 0) return "illegal";
             oss << "c.addi4spn " << c_reg_name(rd_rs2_p) << ",sp," << nzuimm;
@@ -568,9 +568,9 @@ std::string RiscvDisassembler::decode_c_quadrant0(uint16_t instr) {
 std::string RiscvDisassembler::decode_c_quadrant1(uint16_t instr, uint32_t pc) {
     uint32_t funct3 = (instr >> 13) & 0x7;
     uint32_t rd_rs1 = (instr >> 7) & 0x1F;
-    
+
     std::ostringstream oss;
-    
+
     switch (funct3) {
         case 0x0: { // C.ADDI / C.NOP
             int32_t nzimm = sign_extend(((instr >> 7) & 0x20) | ((instr >> 2) & 0x1F), 6);
@@ -616,7 +616,7 @@ std::string RiscvDisassembler::decode_c_quadrant1(uint16_t instr, uint32_t pc) {
             uint32_t funct2 = (instr >> 10) & 0x3;
             uint32_t rd_rs1_p = (instr >> 7) & 0x7;
             uint32_t rs2_p = (instr >> 2) & 0x7;
-            
+
             if (funct2 == 0x0) { // C.SRLI
                 uint32_t shamt = ((instr >> 7) & 0x20) | ((instr >> 2) & 0x1F);
                 oss << "c.srli " << c_reg_name(rd_rs1_p) << "," << shamt;
@@ -632,7 +632,7 @@ std::string RiscvDisassembler::decode_c_quadrant1(uint16_t instr, uint32_t pc) {
             } else if (funct2 == 0x3) {
                 uint32_t funct1 = (instr >> 12) & 0x1;
                 uint32_t funct2_low = (instr >> 5) & 0x3;
-                
+
                 if (funct1 == 0 && funct2_low == 0x0) {
                     oss << "c.sub " << c_reg_name(rd_rs1_p) << "," << c_reg_name(rs2_p);
                 } else if (funct1 == 0 && funct2_low == 0x1) {
@@ -684,9 +684,9 @@ std::string RiscvDisassembler::decode_c_quadrant2(uint16_t instr) {
     uint32_t funct3 = (instr >> 13) & 0x7;
     uint32_t rd_rs1 = (instr >> 7) & 0x1F;
     uint32_t rs2 = (instr >> 2) & 0x1F;
-    
+
     std::ostringstream oss;
-    
+
     switch (funct3) {
         case 0x0: { // C.SLLI
             uint32_t shamt = ((instr >> 7) & 0x20) | ((instr >> 2) & 0x1F);
@@ -708,7 +708,7 @@ std::string RiscvDisassembler::decode_c_quadrant2(uint16_t instr) {
         }
         case 0x4: { // C.JR / C.MV / C.EBREAK / C.JALR / C.ADD
             uint32_t funct1 = (instr >> 12) & 0x1;
-            
+
             if (funct1 == 0) {
                 if (rs2 == 0) { // C.JR
                     if (rd_rs1 == 0) return "illegal";

@@ -54,6 +54,8 @@ typedef struct {
     bool single_step;
     bool should_stop;
     uint32_t last_watchpoint_addr;  // Address of last hit watchpoint
+    int last_stop_signal;           // Last stop signal sent
+    bool breakpoint_hit;            // Flag indicating breakpoint was hit
 } gdb_context_t;
 
 // Callback functions for simulator access
@@ -66,6 +68,7 @@ typedef struct {
     void (*set_pc)(void *sim, uint32_t pc);
     void (*single_step)(void *sim);
     bool (*is_running)(void *sim);
+    void (*reset)(void *sim);  // Optional: reset the simulator state
 } gdb_callbacks_t;
 
 #ifdef __cplusplus
@@ -102,6 +105,9 @@ void gdb_stub_clear_watchpoints(gdb_context_t *ctx);
 
 // Send stop signal to GDB
 int gdb_stub_send_stop_signal(gdb_context_t *ctx, int signal);
+
+// Enhanced stop reason reporting
+int gdb_stub_send_stop_reason(gdb_context_t *ctx, int signal, uint32_t addr);
 
 #ifdef __cplusplus
 }

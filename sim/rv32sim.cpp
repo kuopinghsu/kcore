@@ -3,10 +3,12 @@
 // Implements basic RV32IMAC instruction set with special device handling
 
 #include "rv32sim.h"
+#include "riscv-dis.h"
 #include "gdb_stub.h"
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -204,8 +206,9 @@ RV32Simulator::~RV32Simulator() {
     }
 }
 
-void RV32Simulator::enable_trace(const char *filename) {
+void RV32Simulator::enable_trace(const char *filename, bool rtl_format) {
     trace_enabled = true;
+    rtl_trace_format = rtl_format;
     trace_file.open(filename);
     if (!trace_file.is_open()) {
         std::cerr << "Warning: Failed to open trace file: " << filename
@@ -243,13 +246,85 @@ void RV32Simulator::write_signature() {
     sig_file.close();
 }
 
-
 void RV32Simulator::log_commit(uint32_t pc, uint32_t inst, int rd_num,
                                uint32_t rd_val, bool has_mem,
                                uint32_t mem_addr, uint32_t mem_val,
                                bool is_store, bool is_csr,
                                uint32_t csr_num) {
-    if (trace_enabled && trace_file.is_open()) {
+    if (!trace_enabled || !trace_file.is_open()) {
+        return;
+    }
+
+    static RiscvDisassembler disassembler;
+
+    if (rtl_trace_format) {
+        // RTL trace format: CYCLES PC (INSTR) [reg_write] [mem] [csr] ; disasm
+        std::ostringstream line_stream;
+
+        // Cycle count (use instruction count as proxy), PC, and instruction encoding
+        line_stream << std::dec << inst_count << " "
+                   << "0x" << std::hex << std::setfill('0') << std::setw(8) << pc << " "
+                   << "(0x" << std::setw(8) << inst << ")";
+
+        // Get register names mapping
+        static const char* reg_names[] = {
+            "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
+            "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+            "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+            "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
+        };
+
+        // Add register write if present (skip if CSR write is present)
+        if (rd_num > 0 && !is_csr) {
+            line_stream << " " << reg_names[rd_num] << " "
+                       << "0x" << std::hex << std::setfill('0') << std::setw(8) << rd_val;
+        }
+
+        // Add memory operation if present
+        if (has_mem) {
+            line_stream << " mem 0x" << std::hex << std::setfill('0') << std::setw(8) << mem_addr;
+            if (is_store) {
+                line_stream << " 0x" << std::setw(8) << mem_val;
+            }
+        }
+
+        // Add CSR operation if present (matches RTL format: c<addr>_<name> <value>)
+        if (is_csr) {
+            const char *csr_name = "";
+            switch (csr_num) {
+            case 0x300: csr_name = "mstatus"; break;
+            case 0x301: csr_name = "misa"; break;
+            case 0x304: csr_name = "mie"; break;
+            case 0x305: csr_name = "mtvec"; break;
+            case 0x340: csr_name = "mscratch"; break;
+            case 0x341: csr_name = "mepc"; break;
+            case 0x342: csr_name = "mcause"; break;
+            case 0x343: csr_name = "mtval"; break;
+            case 0x344: csr_name = "mip"; break;
+            case 0xb00: csr_name = "mcycle"; break;
+            case 0xb02: csr_name = "minstret"; break;
+            case 0xc00: csr_name = "cycle"; break;
+            case 0xc01: csr_name = "time"; break;
+            case 0xc02: csr_name = "instret"; break;
+            default: csr_name = "unknown"; break;
+            }
+            line_stream << " c" << std::setfill('0') << std::setw(3) << std::hex << csr_num
+                       << "_" << csr_name
+                       << " 0x" << std::setw(8) << rd_val;
+        }
+
+        // Get base line for alignment
+        std::string base_line = line_stream.str();
+
+        // Add disassembly comment aligned at column 72
+        std::string disasm = disassembler.disassemble(inst, pc);
+        int padding_needed = 72 - base_line.length();
+        if (padding_needed < 2) padding_needed = 2;  // At least 2 spaces
+
+        trace_file << base_line << std::string(padding_needed, ' ') << "; " << disasm << std::endl;
+
+    } else {
+        // Spike trace format: core   0: 3 0xPC (0xINSTR) x<rd> 0x<value> [mem/csr]
         trace_file << "core   0: 3 0x" << std::hex << std::setfill('0')
                    << std::setw(8) << pc << " (0x" << std::setw(8) << inst
                    << ")";
@@ -266,36 +341,16 @@ void RV32Simulator::log_commit(uint32_t pc, uint32_t inst, int rd_num,
         if (is_csr) {
             const char *csr_name = "";
             switch (csr_num) {
-            case 0x300:
-                csr_name = "mstatus";
-                break;
-            case 0x301:
-                csr_name = "misa";
-                break;
-            case 0x304:
-                csr_name = "mie";
-                break;
-            case 0x305:
-                csr_name = "mtvec";
-                break;
-            case 0x340:
-                csr_name = "mscratch";
-                break;
-            case 0x341:
-                csr_name = "mepc";
-                break;
-            case 0x342:
-                csr_name = "mcause";
-                break;
-            case 0x343:
-                csr_name = "mtval";
-                break;
-            case 0x344:
-                csr_name = "mip";
-                break;
-            default:
-                csr_name = "unknown";
-                break;
+            case 0x300: csr_name = "mstatus"; break;
+            case 0x301: csr_name = "misa"; break;
+            case 0x304: csr_name = "mie"; break;
+            case 0x305: csr_name = "mtvec"; break;
+            case 0x340: csr_name = "mscratch"; break;
+            case 0x341: csr_name = "mepc"; break;
+            case 0x342: csr_name = "mcause"; break;
+            case 0x343: csr_name = "mtval"; break;
+            case 0x344: csr_name = "mip"; break;
+            default: csr_name = "unknown"; break;
             }
             trace_file << " c" << std::dec << csr_num << "_" << csr_name
                        << " 0x" << std::hex << std::setfill('0') << std::setw(8)
@@ -1124,7 +1179,6 @@ void RV32Simulator::step() {
             }
             break;
         }
-        }
         if (rd != 0) {
             regs[rd] = result;
             trace_rd = rd;
@@ -1375,10 +1429,12 @@ void print_usage(const char *prog) {
     std::cerr << "                       Supported: rv32ima, rv32ima_zicsr"
               << std::endl;
     std::cerr
-        << "  --trace              Enable instruction trace logging (alias "
+        << "  --trace              Enable Spike-format trace logging (alias "
            "for --log-commits)"
         << std::endl;
-    std::cerr << "  --log-commits        Enable instruction trace logging"
+    std::cerr << "  --log-commits        Enable Spike-format trace logging"
+              << std::endl;
+    std::cerr << "  --rtl-trace          Enable RTL-format trace logging"
               << std::endl;
     std::cerr
         << "  --log=<file>         Specify trace log output file (default: "
@@ -1405,6 +1461,8 @@ void print_usage(const char *prog) {
     std::cerr << "  " << prog << " program.elf" << std::endl;
     std::cerr << "  " << prog << " --log-commits --log=output.log program.elf"
               << std::endl;
+    std::cerr << "  " << prog << " --rtl-trace --log=rtl_trace.txt program.elf"
+              << std::endl;
     std::cerr << "  " << prog
               << " --log-commits -m0x80000000:0x200000 program.elf"
               << std::endl;
@@ -1430,6 +1488,7 @@ int main(int argc, char *argv[]) {
     const char *signature_file = nullptr;
     uint32_t signature_granularity = 4;
     bool trace_enabled = false;
+    bool rtl_trace_format = false;  // Use RTL trace format instead of Spike
     uint32_t mem_base = MEM_BASE;
     uint32_t mem_size = MEM_SIZE;
     const char *isa_name = "rv32ima";
@@ -1453,6 +1512,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--log-commits") == 0 ||
                    strcmp(argv[i], "--trace") == 0) {
             trace_enabled = true;
+        } else if (strcmp(argv[i], "--rtl-trace") == 0) {
+            trace_enabled = true;
+            rtl_trace_format = true;
         } else if (strncmp(argv[i], "--log=", 6) == 0) {
             log_file = argv[i] + 6;
         } else if (strncmp(argv[i], "+signature=", 11) == 0) {
@@ -1544,7 +1606,7 @@ int main(int argc, char *argv[]) {
     RV32Simulator sim(mem_base, mem_size);
 
     if (trace_enabled) {
-        sim.enable_trace(log_file);
+        sim.enable_trace(log_file, rtl_trace_format);
     }
 
     if (signature_file) {

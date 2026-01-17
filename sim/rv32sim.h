@@ -183,6 +183,7 @@ public:
     uint32_t tohost_addr;
     std::ofstream trace_file;
     bool trace_enabled;
+    bool rtl_trace_format;  // If true, use RTL trace format instead of Spike format
     uint32_t mem_base;
     uint32_t mem_size;
 
@@ -229,7 +230,7 @@ public:
     RV32Simulator(uint32_t base = MEM_BASE, uint32_t size = MEM_SIZE);
     ~RV32Simulator();
 
-    void enable_trace(const char* filename);
+    void enable_trace(const char* filename, bool rtl_format = false);
     void enable_signature(const char* filename, uint32_t granularity = 4);
     void write_signature();
     void log_commit(uint32_t pc, uint32_t inst, int rd_num, uint32_t rd_val, bool has_mem, uint32_t mem_addr, uint32_t mem_val, bool is_store, bool is_csr, uint32_t csr_num);

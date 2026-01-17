@@ -14,9 +14,9 @@ CFLAGS = -std=c11 -O2 -Wall
 CXXFLAGS = -std=c++14 -O2 -Wall
 
 # Source files
-SOURCES = rv32sim.cpp gdb_stub.c
-HEADERS = rv32sim.h gdb_stub.h
-OBJECTS = $(BUILD_DIR)/rv32sim.o $(BUILD_DIR)/gdb_stub.o
+SOURCES = rv32sim.cpp riscv-dis.cpp gdb_stub.c
+HEADERS = rv32sim.h riscv-dis.h gdb_stub.h
+OBJECTS = $(BUILD_DIR)/rv32sim.o $(BUILD_DIR)/riscv-dis.o $(BUILD_DIR)/gdb_stub.o
 
 # Target binary
 TARGET = $(BUILD_DIR)/rv32sim
@@ -34,9 +34,13 @@ $(TARGET): $(OBJECTS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJECTS)
 	@echo "Build complete: $(TARGET)"
 
-$(BUILD_DIR)/rv32sim.o: rv32sim.cpp rv32sim.h gdb_stub.h | $(BUILD_DIR)
+$(BUILD_DIR)/rv32sim.o: rv32sim.cpp rv32sim.h riscv-dis.h gdb_stub.h | $(BUILD_DIR)
 	@echo "Compiling rv32sim.cpp..."
 	$(CXX) $(CXXFLAGS) -c -o $@ rv32sim.cpp
+
+$(BUILD_DIR)/riscv-dis.o: riscv-dis.cpp riscv-dis.h | $(BUILD_DIR)
+	@echo "Compiling riscv-dis.cpp..."
+	$(CXX) $(CXXFLAGS) -c -o $@ riscv-dis.cpp
 
 $(BUILD_DIR)/gdb_stub.o: gdb_stub.c gdb_stub.h | $(BUILD_DIR)
 	@echo "Compiling gdb_stub.c..."

@@ -12,6 +12,24 @@
 #include <errno.h>
 #include <ctype.h>
 
+// Forward declarations for static functions
+static void handle_query(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_read_registers(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_write_registers(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_read_memory(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_write_memory(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_breakpoint(gdb_context_t *ctx, bool insert);
+static void handle_read_single_register(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_write_single_register(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_write_memory_binary(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_reset(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_set_thread(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_thread_alive(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_halt_reason(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static void handle_search_memory(gdb_context_t *ctx, void *simulator, const gdb_callbacks_t *callbacks);
+static int send_packet(gdb_stub_t *stub, const char *data);
+static int receive_packet(gdb_stub_t *stub);
+
 // Protocol helpers
 static uint8_t hex_to_int(char c) {
     if (c >= '0' && c <= '9')
@@ -207,6 +225,12 @@ static void handle_query(gdb_context_t *ctx, void *simulator,
                           "<architecture>riscv:rv32</architecture>"
                           "</target>";
         send_packet(&ctx->stub, xml);
+    } else if (strncmp(packet, "qOffsets", 8) == 0) {
+        send_packet(&ctx->stub, "Text=0;Data=0;Bss=0");
+    } else if (strncmp(packet, "qTStatus", 8) == 0) {
+        send_packet(&ctx->stub, "T0;tnotrun:0");
+    } else if (strncmp(packet, "qSearch:memory:", 15) == 0) {
+        handle_search_memory(ctx, simulator, callbacks);
     } else {
         send_packet(&ctx->stub, "");
     }
@@ -354,6 +378,221 @@ static void handle_breakpoint(gdb_context_t *ctx, bool insert) {
     send_packet(&ctx->stub, result == 0 ? "OK" : "E01");
 }
 
+// Read single register (p command)
+static void handle_read_single_register(gdb_context_t *ctx, void *simulator,
+                                       const gdb_callbacks_t *callbacks) {
+    char *packet = ctx->stub.packet_buffer + 1;
+    int reg_num = (int)parse_hex(packet, strlen(packet));
+
+    if (reg_num < 0 || reg_num > 32) {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    char response[16];
+    uint32_t value;
+
+    if (reg_num < 32) {
+        value = callbacks->read_reg(simulator, reg_num);
+    } else if (reg_num == 32) {
+        value = callbacks->get_pc(simulator);
+    } else {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    encode_hex(response, value, 4);
+    response[8] = '\0';
+    send_packet(&ctx->stub, response);
+}
+
+// Write single register (P command)
+static void handle_write_single_register(gdb_context_t *ctx, void *simulator,
+                                        const gdb_callbacks_t *callbacks) {
+    char *packet = ctx->stub.packet_buffer + 1;
+    char *equals = strchr(packet, '=');
+
+    if (!equals) {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    *equals = '\0';
+    int reg_num = (int)parse_hex(packet, equals - packet);
+    uint32_t value = parse_hex(equals + 1, strlen(equals + 1));
+
+    if (reg_num < 0 || reg_num > 32) {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    if (reg_num < 32) {
+        callbacks->write_reg(simulator, reg_num, value);
+    } else if (reg_num == 32) {
+        callbacks->set_pc(simulator, value);
+    } else {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    send_packet(&ctx->stub, "OK");
+}
+
+// Write memory with binary data (X command)
+static void handle_write_memory_binary(gdb_context_t *ctx, void *simulator,
+                                      const gdb_callbacks_t *callbacks) {
+    char *packet = ctx->stub.packet_buffer + 1;
+    char *comma = strchr(packet, ',');
+    char *colon = strchr(packet, ':');
+
+    if (!comma || !colon) {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    *comma = '\0';
+    *colon = '\0';
+
+    uint32_t addr = parse_hex(packet, comma - packet);
+    uint32_t len = parse_hex(comma + 1, colon - comma - 1);
+    char *data = colon + 1;
+
+    // For simplicity, treat binary data as hex-encoded for now
+    // In a full implementation, this would handle raw binary data
+    for (uint32_t i = 0; i < len && i * 2 < strlen(data); i++) {
+        uint8_t byte = (hex_to_int(data[i * 2]) << 4) | hex_to_int(data[i * 2 + 1]);
+        callbacks->write_mem(simulator, addr + i, byte, 1);
+    }
+
+    send_packet(&ctx->stub, "OK");
+}
+
+// Reset/restart target (R command)
+static void handle_reset(gdb_context_t *ctx, void *simulator,
+                        const gdb_callbacks_t *callbacks) {
+    // Use simulator-specific reset if available
+    if (callbacks->reset) {
+        callbacks->reset(simulator);
+    } else {
+        // Default reset behavior
+        // Reset PC to 0 (typical reset vector for RISC-V)
+        callbacks->set_pc(simulator, 0);
+
+        // Clear all registers (x1-x31, keep x0 as zero)
+        for (int i = 1; i < 32; i++) {
+            callbacks->write_reg(simulator, i, 0);
+        }
+    }
+
+    // Clear breakpoints and watchpoints on reset
+    gdb_stub_clear_breakpoints(ctx);
+    gdb_stub_clear_watchpoints(ctx);
+
+    ctx->should_stop = true;
+    ctx->single_step = false;
+    ctx->last_stop_signal = 5; // SIGTRAP
+    ctx->breakpoint_hit = false;
+
+    send_packet(&ctx->stub, "OK");
+}
+
+// Set thread for subsequent operations (H command)
+static void handle_set_thread(gdb_context_t *ctx, void *simulator,
+                             const gdb_callbacks_t *callbacks) {
+    char *packet = ctx->stub.packet_buffer + 1;
+
+    // Simple single-threaded implementation
+    // Format: Hg<thread-id> or Hc<thread-id>
+    if (packet[0] == 'g' || packet[0] == 'c') {
+        // For single-threaded system, accept thread ID 0, 1, or -1
+        send_packet(&ctx->stub, "OK");
+    } else {
+        send_packet(&ctx->stub, "E01");
+    }
+}
+
+// Check if thread is alive (T command)
+static void handle_thread_alive(gdb_context_t *ctx, void *simulator,
+                               const gdb_callbacks_t *callbacks) {
+    char *packet = ctx->stub.packet_buffer + 1;
+    int thread_id = (int)parse_hex(packet, strlen(packet));
+
+    // For single-threaded system, only thread 1 is alive
+    if (thread_id == 1 || thread_id == 0) {
+        send_packet(&ctx->stub, "OK");
+    } else {
+        send_packet(&ctx->stub, "E01");
+    }
+}
+
+// Enhanced halt reason reporting
+static void handle_halt_reason(gdb_context_t *ctx, void *simulator,
+                              const gdb_callbacks_t *callbacks) {
+    char response[64];
+
+    if (ctx->single_step) {
+        // Single step completed
+        snprintf(response, sizeof(response), "S05");
+    } else if (ctx->last_watchpoint_addr != 0) {
+        // Watchpoint hit
+        snprintf(response, sizeof(response), "T05watch:%08x;", ctx->last_watchpoint_addr);
+        ctx->last_watchpoint_addr = 0; // Clear after reporting
+    } else {
+        // Breakpoint or interrupt
+        uint32_t pc = callbacks->get_pc(simulator);
+        if (gdb_stub_check_breakpoint(ctx, pc)) {
+            snprintf(response, sizeof(response), "T05hwbreak:;");
+        } else {
+            snprintf(response, sizeof(response), "S05"); // Generic stop
+        }
+    }
+
+    send_packet(&ctx->stub, response);
+}
+
+// Search memory for pattern (qSearch:memory command)
+static void handle_search_memory(gdb_context_t *ctx, void *simulator,
+                                const gdb_callbacks_t *callbacks) {
+    char *packet = ctx->stub.packet_buffer + 15; // Skip "qSearch:memory:"
+    char *colon1 = strchr(packet, ':');
+    char *colon2 = colon1 ? strchr(colon1 + 1, ':') : NULL;
+
+    if (!colon1 || !colon2) {
+        send_packet(&ctx->stub, "E01");
+        return;
+    }
+
+    *colon1 = '\0';
+    *colon2 = '\0';
+
+    uint32_t start_addr = parse_hex(packet, colon1 - packet);
+    uint32_t search_len = parse_hex(colon1 + 1, colon2 - colon1 - 1);
+    char *pattern = colon2 + 1;
+
+    int pattern_len = strlen(pattern) / 2; // Hex encoded pattern
+
+    // Simple linear search implementation
+    for (uint32_t addr = start_addr; addr < start_addr + search_len - pattern_len; addr++) {
+        bool match = true;
+        for (int i = 0; i < pattern_len; i++) {
+            uint8_t pattern_byte = (hex_to_int(pattern[i * 2]) << 4) | hex_to_int(pattern[i * 2 + 1]);
+            uint8_t mem_byte = callbacks->read_mem(simulator, addr + i, 1) & 0xFF;
+            if (pattern_byte != mem_byte) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            char response[32];
+            snprintf(response, sizeof(response), "1,%08x", addr);
+            send_packet(&ctx->stub, response);
+            return;
+        }
+    }
+
+    send_packet(&ctx->stub, "0"); // Not found
+}
+
 // Process GDB commands
 int gdb_stub_process(gdb_context_t *ctx, void *simulator,
                      const gdb_callbacks_t *callbacks) {
@@ -374,7 +613,7 @@ int gdb_stub_process(gdb_context_t *ctx, void *simulator,
         break;
 
     case '?': // Halt reason
-        send_packet(&ctx->stub, "S05");
+        handle_halt_reason(ctx, simulator, callbacks);
         break;
 
     case 'q': // Query
@@ -395,6 +634,30 @@ int gdb_stub_process(gdb_context_t *ctx, void *simulator,
 
     case 'M': // Write memory
         handle_write_memory(ctx, simulator, callbacks);
+        break;
+
+    case 'p': // Read single register
+        handle_read_single_register(ctx, simulator, callbacks);
+        break;
+
+    case 'P': // Write single register
+        handle_write_single_register(ctx, simulator, callbacks);
+        break;
+
+    case 'X': // Write memory (binary)
+        handle_write_memory_binary(ctx, simulator, callbacks);
+        break;
+
+    case 'R': // Reset/restart
+        handle_reset(ctx, simulator, callbacks);
+        break;
+
+    case 'H': // Set thread
+        handle_set_thread(ctx, simulator, callbacks);
+        break;
+
+    case 'T': // Thread alive
+        handle_thread_alive(ctx, simulator, callbacks);
         break;
 
     case 'c': // Continue
@@ -472,6 +735,7 @@ void gdb_stub_clear_breakpoints(gdb_context_t *ctx) {
 bool gdb_stub_check_breakpoint(gdb_context_t *ctx, uint32_t pc) {
     for (int i = 0; i < ctx->breakpoint_count; i++) {
         if (ctx->breakpoints[i].enabled && ctx->breakpoints[i].addr == pc) {
+            ctx->breakpoint_hit = true;
             return true;
         }
     }
@@ -574,5 +838,23 @@ void gdb_stub_close(gdb_context_t *ctx) {
 int gdb_stub_send_stop_signal(gdb_context_t *ctx, int signal) {
     char response[32];
     snprintf(response, sizeof(response), "S%02x", signal & 0xFF);
+    return send_packet(&ctx->stub, response);
+}
+
+int gdb_stub_send_stop_reason(gdb_context_t *ctx, int signal, uint32_t addr) {
+    char response[128];
+
+    if (ctx->breakpoint_hit) {
+        snprintf(response, sizeof(response), "T%02xhwbreak:;", signal & 0xFF);
+        ctx->breakpoint_hit = false;
+    } else if (ctx->last_watchpoint_addr != 0) {
+        snprintf(response, sizeof(response), "T%02xwatch:%08x;", signal & 0xFF, ctx->last_watchpoint_addr);
+        ctx->last_watchpoint_addr = 0;
+    } else if (addr != 0) {
+        snprintf(response, sizeof(response), "T%02x%02x:%08x;", signal & 0xFF, 32, addr); // PC register
+    } else {
+        snprintf(response, sizeof(response), "T%02x", signal & 0xFF);
+    }
+
     return send_packet(&ctx->stub, response);
 }
