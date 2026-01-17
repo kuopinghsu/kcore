@@ -177,8 +177,10 @@ MEM_TRACE_VERIFY = $(SCRIPTS_DIR)/analyze_mem_trace.py
 USE_SPIKE ?= 0
 ifeq ($(USE_SPIKE),1)
 SW_SIM = $(SPIKE)
+SW_SIM_TRACE_OPT = $(if $(filter 1,$(TRACE)),--log-commits --log=$(BUILD_DIR)/sim_trace.txt)
 else
 SW_SIM = $(BUILD_DIR)/rv32sim
+SW_SIM_TRACE_OPT = $(if $(filter 1,$(TRACE)),--rtl-trace --log=$(BUILD_DIR)/sim_trace.txt)
 endif
 
 # ============================================================================
@@ -384,15 +386,17 @@ build-verilator: $(BUILD_DIR) $(RTL_SOURCES) $(TB_SOURCES)
 	fi
 	$(VERILATOR) $(VLT_FLAGS) \
 		--Mdir $(VLT_BUILD_DIR) \
-		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.cpp
+		$(RTL_SOURCES) $(TB_SOURCES) $(shell pwd)/$(TB_DIR)/tb_main.cpp $(shell pwd)/$(TB_DIR)/elfloader.cpp $(shell pwd)/sim/riscv-dis.cpp
 	@echo "=== RTL simulation binary built ==="
 
 .PHONY: rtl
 rtl: sw build-verilator
 	@echo "=== Running RTL simulation ==="
-	@set -o pipefail; $(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log
+	@set -o pipefail; $(VLT_BUILD_DIR)/kcore_vsim +PROGRAM=$(SW_ELF) $(VLT_WAVE_ARG) $(VLT_TRACE_ARG) $(if $(MAX_CYCLES),+MAX_CYCLES=$(MAX_CYCLES)) | tee $(BUILD_DIR)/rtl_output.log; \
+	SIM_EXIT=$$?; \
+	if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi; \
+	exit $$SIM_EXIT
 	@echo "=== RTL simulation complete ==="
-	@if [ -f rtl_trace.txt ]; then mv rtl_trace.txt $(BUILD_DIR)/; fi
 	@if [ -n "$(DUMP_FILE)" ] && [ -f $(DUMP_FILE) ]; then \
 		mv $(DUMP_FILE) $(BUILD_DIR)/; \
 		echo "Waveform saved to $(BUILD_DIR)/$(DUMP_FILE)"; \
@@ -479,9 +483,9 @@ freertos-sim-%: build-sim
 	@echo "=== Running FreeRTOS Test in Simulator: $* ==="
 	@set -o pipefail; \
 	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 
 .PHONY: freertos-compare-%
@@ -498,9 +502,9 @@ freertos-compare-%:
 	@$(MAKE) freertos-rtl-$* TRACE=1
 	@set -o pipefail; \
 	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
 
@@ -549,9 +553,9 @@ $(SIM_BIN):
 sim: build-sim sw
 	@echo "=== Running software simulator ==="
 	@if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 	@echo "=== Software simulation complete ==="
 
@@ -1202,9 +1206,9 @@ zephyr-sim-%: build-sim
 	@echo "=== Running Zephyr Test in Simulator: $* ==="
 	@set -o pipefail; \
 	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 
 .PHONY: zephyr-compare-%
@@ -1221,9 +1225,9 @@ zephyr-compare-%:
 	@$(MAKE) zephyr-rtl-$* TRACE=1
 	@set -o pipefail; \
 	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 	@python3 $(TRACE_COMPARE) $(BUILD_DIR)/rtl_trace.txt $(BUILD_DIR)/sim_trace.txt
 
@@ -1337,9 +1341,9 @@ nuttx-sim-%: build-sim
 	@echo "=== Running NuttX Test: $* ==="
 	@set -o pipefail; \
 	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 
 .PHONY: nuttx-compare-%
@@ -1352,9 +1356,9 @@ nuttx-compare-%:
 	@echo "Running Spike ISA simulator with the same binary..."
 	@set -o pipefail; \
 	if [ "$(MAX_CYCLES)" != "" ] && [ "$(MAX_CYCLES)" != "0" ]; then \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) --instructions=$(MAX_CYCLES) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	else \
-		$(SW_SIM) --isa=rv32ima --log-commits --log=$(BUILD_DIR)/sim_trace.txt -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
+		$(SW_SIM) --isa=rv32ima $(SW_SIM_TRACE_OPT) -m0x80000000:0x200000 $(SW_ELF) | tee $(BUILD_DIR)/sim_output.log; \
 	fi
 	@echo ""
 	@echo "=== Comparing traces: RTL vs Spike ==="

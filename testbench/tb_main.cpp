@@ -5,6 +5,7 @@
 #include "Vtb_soc.h"
 #include "svdpi.h"
 #include "elfloader.h"
+#include "../sim/riscv-dis.h"
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -64,9 +65,6 @@ void print_help() {
     std::cout << "  +signature-granularity=<n>   Signature granularity in bytes (1/2/4/8, default: 4)" << std::endl;
     std::cout << "  +TRACE                       Enable RTL instruction trace (rtl_trace.txt)" << std::endl;
     std::cout << "  +WAVE                        Enable waveform dump (dump.fst or dump.vcd)" << std::endl;
-    std::cout << "  +OBJDUMP=<path>              Path to objdump for disassembly" << std::endl;
-    std::cout << "\nEnvironment:" << std::endl;
-    std::cout << "  OBJDUMP                      Default objdump path (env.config or environment)" << std::endl;
     std::cout << "  RISCOF_DEBUG                 Enable debug mode (set to 1)" << std::endl;
     std::cout << "\nExamples:" << std::endl;
     std::cout << "  kcore_vsim +PROGRAM=test.elf" << std::endl;
@@ -205,55 +203,6 @@ std::string read_config_value(const std::string& key) {
     return "";
 }
 
-// Load disassembly from objdump
-std::map<uint32_t, std::string> load_disassembly(const std::string& binary_file, const std::string& objdump_path) {
-    std::map<uint32_t, std::string> disasm_map;
-    std::string cmd = objdump_path + " -d " + binary_file + " 2>/dev/null";
-    FILE* pipe = popen(cmd.c_str(), "r");
-    if (!pipe) {
-        std::cerr << "Warning: Could not run objdump for disassembly" << std::endl;
-        return disasm_map;
-    }
-
-    char buffer[256];
-    while (fgets(buffer, sizeof(buffer), pipe)) {
-        std::string line(buffer);
-        // Match lines like: "80000000:\t30047073\taddi\tsp,sp,-16"
-        size_t colon_pos = line.find(':');
-        if (colon_pos != std::string::npos && colon_pos > 0) {
-            // Extract PC address
-            std::string addr_str = line.substr(0, colon_pos);
-            // Trim whitespace
-            addr_str.erase(0, addr_str.find_first_not_of(" \t"));
-
-            uint32_t pc = 0;
-            if (sscanf(addr_str.c_str(), "%x", &pc) == 1) {
-                // Extract disassembly (after tabs)
-                size_t tab_pos = line.find('\t', colon_pos);
-                if (tab_pos != std::string::npos) {
-                    tab_pos = line.find('\t', tab_pos + 1);  // Skip hex instruction
-                    if (tab_pos != std::string::npos) {
-                        std::string disasm = line.substr(tab_pos + 1);
-                        // Remove newline and trim
-                        size_t newline_pos = disasm.find('\n');
-                        if (newline_pos != std::string::npos) {
-                            disasm = disasm.substr(0, newline_pos);
-                        }
-                        // Replace tabs with spaces
-                        for (size_t i = 0; i < disasm.length(); i++) {
-                            if (disasm[i] == '\t') disasm[i] = ' ';
-                        }
-                        disasm_map[pc] = disasm;
-                    }
-                }
-            }
-        }
-    }
-    pclose(pipe);
-    std::cout << "Loaded " << disasm_map.size() << " disassembly entries from objdump" << std::endl;
-    return disasm_map;
-}
-
 int main(int argc, char** argv) {
     // Initialize Verilators variables
     Verilated::commandArgs(argc, argv);
@@ -272,7 +221,6 @@ int main(int argc, char** argv) {
         print_help();
         return 1;
     }
-
 
     #ifdef HAVE_CHRONO
     std::chrono::steady_clock::time_point time_begin;
@@ -354,36 +302,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Load disassembly only if trace is enabled
-    std::map<uint32_t, std::string> disasm_map;
+    // Create disassembler instance for trace generation
+    RiscvDisassembler disassembler;
     if (enable_trace) {
-        // Get objdump path - try +OBJDUMP= argument first, then env.config, then default
-        std::string objdump_path;
-        const char* objdump_arg = Verilated::commandArgsPlusMatch("OBJDUMP=");
-        if (objdump_arg && strlen(objdump_arg) > 9) {  // Check if there's actually a value after "+OBJDUMP="
-            objdump_path = objdump_arg + 9;  // Use command line argument
-            std::cout << "Using objdump from +OBJDUMP argument: " << objdump_path << std::endl;
-        } else {
-            // Read from env.config
-            std::string riscv_prefix = read_config_value("RISCV_PREFIX");
-            if (!riscv_prefix.empty()) {
-                objdump_path = riscv_prefix + "objdump";
-                std::cout << "Using objdump from env.config: " << objdump_path << std::endl;
-            } else {
-                objdump_path = "riscv-none-elf-objdump";  // Default fallback
-                std::cout << "Using default objdump: " << objdump_path << std::endl;
-            }
-        }
-
-        // Derive ELF filename from binary (replace .bin with .elf)
-        std::string elf_name = prog_name;
-        size_t dot_pos = elf_name.rfind(".bin");
-        if (dot_pos != std::string::npos) {
-            elf_name.replace(dot_pos, 4, ".elf");
-        }
-
-        // Load disassembly from objdump using ELF file
-        disasm_map = load_disassembly(elf_name, objdump_path);
+        std::cout << "Using built-in RISC-V disassembler for trace generation" << std::endl;
     }
 
     // Simulation parameters
@@ -418,8 +340,9 @@ int main(int argc, char** argv) {
     const uint32_t INFINITE_LOOP_THRESHOLD = 100;  // Same PC retiring many times = infinite loop (increased to allow exit processing)
     const uint64_t MIN_INSTRET_FOR_TIMEOUT = 5;  // Only check timeout after some instructions retired
 
-    // Track instruction retirement for trace
+    // Track instruction retirement for trace - edge detection
     uint64_t prev_instret = 0;
+    int prev_wb_instr_retired = 0;
 
     // Helper function to get register name
     // Optimized register name lookup using static array
@@ -524,7 +447,8 @@ int main(int argc, char** argv) {
 
         // Write trace when instruction retires (wb_instr_retired pulses)
         // Format: CYCLES PC (INSTR) [REGWRITE] [MEMACCESS] [CSRACCESS] ; DISASM
-        if (enable_trace && dut->wb_instr_retired) {
+        // Use edge detection on wb_instr_retired to avoid duplicate trace lines when signal stays high
+        if (enable_trace && dut->wb_instr_retired && !prev_wb_instr_retired) {
             std::ostringstream line_stream;
 
             // Start with: CYCLES PC (INSTR)
@@ -564,11 +488,7 @@ int main(int argc, char** argv) {
             std::string base_line = line_stream.str();
 
             // Add disassembly comment aligned at column 72
-            std::string disasm = "unknown";
-            auto it = disasm_map.find((uint32_t)dut->wb_pc);
-            if (it != disasm_map.end()) {
-                disasm = it->second;
-            }
+            std::string disasm = disassembler.disassemble((uint32_t)dut->wb_instr, (uint32_t)dut->wb_pc);
 
             int padding_needed = 72 - base_line.length();
             if (padding_needed < 2) padding_needed = 2;  // At least 2 spaces
@@ -687,6 +607,9 @@ int main(int argc, char** argv) {
         // Advance time and cycle counter
         main_time += (RESOLUTION/2);
         cycle++;
+
+        // Update edge detection for next cycle
+        prev_wb_instr_retired = dut->wb_instr_retired;
     }
 
     #ifdef HAVE_CHRONO
