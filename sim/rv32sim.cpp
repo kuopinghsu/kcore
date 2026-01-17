@@ -1076,30 +1076,30 @@ void RV32Simulator::step() {
             bool do_write = false;
 
             switch (funct3) {
-            case 0x1: // CSRRW
-                write_val = regs[rs1];
-                do_write = true;
-                break;
-            case 0x2: // CSRRS
-                write_val = csr_val | regs[rs1];
-                do_write = (rs1 != 0);
-                break;
-            case 0x3: // CSRRC
-                write_val = csr_val & ~regs[rs1];
-                do_write = (rs1 != 0);
-                break;
-            case 0x5: // CSRRWI
-                write_val = zimm;
-                do_write = true;
-                break;
-            case 0x6: // CSRRSI
-                write_val = csr_val | zimm;
-                do_write = (zimm != 0);
-                break;
-            case 0x7: // CSRRCI
-                write_val = csr_val & ~zimm;
-                do_write = (zimm != 0);
-                break;
+                case 0x1: // CSRRW
+                    write_val = regs[rs1];
+                    do_write = true;
+                    break;
+                case 0x2: // CSRRS
+                    write_val = csr_val | regs[rs1];
+                    do_write = (rs1 != 0);
+                    break;
+                case 0x3: // CSRRC
+                    write_val = csr_val & ~regs[rs1];
+                    do_write = (rs1 != 0);
+                    break;
+                case 0x5: // CSRRWI
+                    write_val = zimm;
+                    do_write = true;
+                    break;
+                case 0x6: // CSRRSI
+                    write_val = csr_val | zimm;
+                    do_write = (zimm != 0);
+                    break;
+                case 0x7: // CSRRCI
+                    write_val = csr_val & ~zimm;
+                    do_write = (zimm != 0);
+                    break;
             }
 
             if (rd != 0) {
@@ -1124,60 +1124,61 @@ void RV32Simulator::step() {
         uint32_t store_val = regs[rs2];
 
         switch (funct3) {
-        case 0x2: { // Word operations
-            uint32_t funct5 = (funct7 >> 2) & 0x1F;
-            switch (funct5) {
-            case 0x02:
-                write_mem(addr, store_val, 4);
-                break; // LR.W (just load)
-            case 0x03:
-                write_mem(addr, store_val, 4);
-                result = 0;
-                break; // SC.W
-            case 0x01:
-                result = loaded;
-                write_mem(addr, store_val, 4);
-                break; // AMOSWAP.W
-            case 0x00:
-                result = loaded;
-                write_mem(addr, loaded + store_val, 4);
-                break; // AMOADD.W
-            case 0x04:
-                result = loaded;
-                write_mem(addr, loaded ^ store_val, 4);
-                break; // AMOXOR.W
-            case 0x0C:
-                result = loaded;
-                write_mem(addr, loaded & store_val, 4);
-                break; // AMOAND.W
-            case 0x08:
-                result = loaded;
-                write_mem(addr, loaded | store_val, 4);
-                break; // AMOOR.W
-            case 0x10:
-                result = loaded;
-                write_mem(addr,
-                          ((int32_t)loaded < (int32_t)store_val) ? loaded
-                                                                 : store_val,
-                          4);
-                break; // AMOMIN.W
-            case 0x14:
-                result = loaded;
-                write_mem(addr,
-                          ((int32_t)loaded > (int32_t)store_val) ? loaded
-                                                                 : store_val,
-                          4);
-                break; // AMOMAX.W
-            case 0x18:
-                result = loaded;
-                write_mem(addr, (loaded < store_val) ? loaded : store_val, 4);
-                break; // AMOMINU.W
-            case 0x1C:
-                result = loaded;
-                write_mem(addr, (loaded > store_val) ? loaded : store_val, 4);
-                break; // AMOMAXU.W
+            case 0x2: { // Word operations
+                uint32_t funct5 = (funct7 >> 2) & 0x1F;
+                switch (funct5) {
+                    case 0x02:
+                        write_mem(addr, store_val, 4);
+                        break; // LR.W (just load)
+                    case 0x03:
+                        write_mem(addr, store_val, 4);
+                        result = 0;
+                        break; // SC.W
+                    case 0x01:
+                        result = loaded;
+                        write_mem(addr, store_val, 4);
+                        break; // AMOSWAP.W
+                    case 0x00:
+                        result = loaded;
+                        write_mem(addr, loaded + store_val, 4);
+                        break; // AMOADD.W
+                    case 0x04:
+                        result = loaded;
+                        write_mem(addr, loaded ^ store_val, 4);
+                        break; // AMOXOR.W
+                    case 0x0C:
+                        result = loaded;
+                        write_mem(addr, loaded & store_val, 4);
+                        break; // AMOAND.W
+                    case 0x08:
+                        result = loaded;
+                        write_mem(addr, loaded | store_val, 4);
+                        break; // AMOOR.W
+                    case 0x10:
+                        result = loaded;
+                        write_mem(addr,
+                                  ((int32_t)loaded < (int32_t)store_val) ? loaded
+                                                                         : store_val,
+                                  4);
+                        break; // AMOMIN.W
+                    case 0x14:
+                        result = loaded;
+                        write_mem(addr,
+                                  ((int32_t)loaded > (int32_t)store_val) ? loaded
+                                                                         : store_val,
+                                  4);
+                        break; // AMOMAX.W
+                    case 0x18:
+                        result = loaded;
+                        write_mem(addr, (loaded < store_val) ? loaded : store_val, 4);
+                        break; // AMOMINU.W
+                    case 0x1C:
+                        result = loaded;
+                        write_mem(addr, (loaded > store_val) ? loaded : store_val, 4);
+                        break; // AMOMAXU.W
+                }
+                break;
             }
-            break;
         }
         if (rd != 0) {
             regs[rd] = result;
